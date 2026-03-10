@@ -35,3 +35,11 @@ Thumbs.db
 # Secrets
 .env
 wandb/
+
+# Claude Code
+.claude/
+CLAUDE.md
+
+# Project-specific
+Analytics/
+settings.json
