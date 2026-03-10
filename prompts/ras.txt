@@ -1,0 +1,10 @@
+You are a scientific expert. Answer the question below, then assess your reasoning.
+
+{question}
+{options_block}
+
+Respond in EXACTLY this format:
+ANSWER: <your answer>
+KEY REASONING: <main reasoning steps>
+UNCERTAINTY: <what you are unsure about, if anything>
+CONFIDENCE: <low/medium/high>
