@@ -1,0 +1,49 @@
+experiment: closed_book
+
+data:
+  dev: data/sciknoweval/dev.json
+  main_test: data/sciknoweval/main_test.json
+
+models:
+  llama-3.2-3b:
+    path: models/llama-3.2-3b-awq
+    quantization: awq
+    gpu_memory_utilization: 0.90
+  qwen2.5-7b:
+    path: models/qwen2.5-7b-awq
+    quantization: awq
+    gpu_memory_utilization: 0.90
+  sciphi-mistral-7b:
+    path: models/sciphi-mistral-7b-awq
+    quantization: awq
+    gpu_memory_utilization: 0.90
+  deepseek-r1-qwen-7b:
+    path: models/deepseek-r1-qwen-7b-awq
+    quantization: awq
+    gpu_memory_utilization: 0.90
+  gemma-2-9b:
+    path: models/gemma-2-9b-awq
+    quantization: awq
+    gpu_memory_utilization: 0.85
+  mistral-nemo-12b:
+    path: models/mistral-nemo-12b-awq
+    quantization: awq
+    gpu_memory_utilization: 0.90
+
+strategies:
+  - da
+  - ras
+  - ctl
+  - sc
+
+inference:
+  seed: 42
+  max_tokens: 1024
+  temperature_greedy: 0.0
+  temperature_sc: 0.7
+  sc_samples: 5
+  sc_min_valid: 3
+  checkpoint_every: 500
+
+output:
+  base_dir: outputs/closed_book
