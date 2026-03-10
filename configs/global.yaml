@@ -1,0 +1,7 @@
+seed: 42
+max_new_tokens: 1024
+sc_samples: 5
+sc_temperature: 0.7
+top_k_passages: 10
+chunk_size: 256
+chunk_overlap: 64
