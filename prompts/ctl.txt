@@ -1,0 +1,8 @@
+You are a scientific expert. Think carefully step by step, then provide only your final answer and rationale.
+
+{question}
+{options_block}
+
+Respond in EXACTLY this format:
+ANSWER: <your answer>
+RATIONALE: <concise explanation of your reasoning>

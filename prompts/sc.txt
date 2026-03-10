@@ -1,0 +1,6 @@
+Protocol: Self-Consistency (SC)
+- Uses DA template (prompts/da.txt)
+- Run N=5 times at temperature=0.7
+- Majority vote on normalized answers
+- Minimum 3 valid parses for quorum
+- Tie-breaking: first occurrence wins

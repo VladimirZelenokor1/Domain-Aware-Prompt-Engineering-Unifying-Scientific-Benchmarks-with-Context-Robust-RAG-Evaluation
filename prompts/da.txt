@@ -1,0 +1,8 @@
+You are a scientific expert. Answer the following question concisely with a direct answer and brief justification.
+
+{question}
+{options_block}
+
+Respond in EXACTLY this format:
+ANSWER: <your answer>
+JUSTIFICATION: <brief explanation>
