@@ -6,7 +6,7 @@
   "transformers_version": "4.57.6",
   "sentence_transformers_version": "5.2.3",
   "torch_version": "2.10.0+cu128",
-  "notes": "Models tested sequentially with cleanup between each. Desktop apps consumed ~1.3-2.5 GB VRAM during testing, reducing available headroom. Models marked OOM should pass when desktop VRAM usage is minimized (<500 MiB).",
+  "notes": "Models tested sequentially with cleanup between each. Session 1 had ~2.5 GB desktop VRAM pressure; session 2 retested with clean VRAM (~989 MiB baseline).",
   "llms": {
     "llama-3.2-3b-awq": {
       "hf_id": "AMead10/Llama-3.2-3B-Instruct-AWQ",
@@ -114,15 +114,17 @@
       "max_position_embeddings": 32768,
       "disk_gb": 5.2,
       "license": "apache-2.0",
-      "test_status": "oom",
+      "test_status": "passed",
       "test_settings": {
         "backend": "vllm",
-        "gpu_memory_utilization": 0.90,
-        "max_model_len": 256,
-        "enforce_eager": true,
+        "gpu_memory_utilization": 0.85,
+        "max_model_len": 2048,
+        "enforce_eager": false,
         "dtype": "float16"
       },
-      "test_notes": "OOM with ~2.5 GB desktop VRAM usage. zero_point=true adds extra tensors vs DeepSeek (zero_point=false). Should pass with <500 MiB desktop VRAM."
+      "test_vram_mib": 7848,
+      "test_output_contains_h2o": true,
+      "test_notes": "OOM in session 1 (~2.5 GB desktop VRAM). Passed in session 2 with clean VRAM (~989 MiB baseline) at standard settings."
     },
     "gemma-2-9b-awq": {
       "hf_id": "hugging-quants/gemma-2-9b-it-AWQ-INT4",
@@ -132,7 +134,7 @@
       "model_type": "gemma2",
       "architecture": "Gemma2ForCausalLM",
       "params_b": 9.0,
-      "quantization": "awq",
+      "quantization": "awq_marlin",
       "bits": 4,
       "zero_point": true,
       "hidden_size": 3584,
@@ -145,12 +147,13 @@
       "test_status": "oom",
       "test_settings": {
         "backend": "vllm",
-        "gpu_memory_utilization": 0.90,
-        "max_model_len": 256,
+        "quantization": "awq_marlin",
+        "gpu_memory_utilization": 0.85,
+        "max_model_len": 512,
         "enforce_eager": true,
-        "dtype": "auto"
+        "dtype": "bfloat16"
       },
-      "test_notes": "OOM with ~2.5 GB desktop VRAM. Additional issue: Gemma2 requires bfloat16 but AWQ only supports float16 in vLLM. Use quantization='awq_marlin' to resolve dtype conflict. Should pass with clean VRAM."
+      "test_notes": "Does not fit on RTX 4060 8GB. Model weights take 5.78 GiB, leaving no room for KV cache even with enforce_eager and min context. Requires awq_marlin (not awq) due to Gemma2 bfloat16 requirement. Tried: 0.90/2048 (startup fail), 0.85/2048 (KV -0.99 GiB), 0.95/512/eager (startup fail), 0.85/512/eager (KV -0.14 GiB). Options: GGUF with partial offload, exclude from experiment, or cloud GPU."
     },
     "mistral-nemo-12b-awq": {
       "hf_id": "casperhansen/mistral-nemo-instruct-2407-awq",
@@ -173,12 +176,12 @@
       "test_status": "oom",
       "test_settings": {
         "backend": "vllm",
-        "gpu_memory_utilization": 0.90,
-        "max_model_len": 256,
+        "gpu_memory_utilization": 0.85,
+        "max_model_len": 2048,
         "enforce_eager": true,
         "dtype": "float16"
       },
-      "test_notes": "OOM with ~2.5 GB desktop VRAM. Largest model at 7.79 GB disk. Needs virtually all 8 GB VRAM. Must close all GPU-heavy desktop apps before testing."
+      "test_notes": "Does not fit on RTX 4060 8GB. Model weights take 8.08 GiB - exceeds total GPU memory (8.0 GiB). Tested with clean VRAM (~664 MiB baseline). No vLLM settings can make this work. Options: GGUF with partial GPU offload, exclude from experiment, or cloud GPU."
     }
   },
   "auxiliary": {
@@ -219,24 +222,40 @@
       "test_score_irrelevant": 0.0,
       "test_vram_mib": 4227
     },
-    "deberta-v3-large": {
-      "hf_id": "microsoft/deberta-v3-large",
-      "local_path": "models/deberta-v3-large/",
+    "nli-deberta-v3-large": {
+      "hf_id": "cross-encoder/nli-deberta-v3-large",
+      "local_path": "models/nli-deberta-v3-large/",
       "role": "nli",
       "model_type": "deberta-v2",
+      "architecture": "DebertaV2ForSequenceClassification",
       "hidden_size": 1024,
       "num_layers": 24,
       "num_heads": 16,
       "vocab_size": 128100,
       "max_position_embeddings": 512,
-      "disk_gb": 2.97,
+      "disk_gb": 1.67,
+      "disk_gb_with_onnx": 8.98,
       "license": "mit",
-      "library": "transformers (AutoModelForSequenceClassification)",
+      "library": "transformers (AutoModelForSequenceClassification) or sentence-transformers (CrossEncoder)",
+      "id2label": {"0": "contradiction", "1": "entailment", "2": "neutral"},
       "test_status": "passed",
-      "test_num_labels": 2,
-      "test_prediction": "entailment",
-      "test_vram_mib": 4735,
-      "test_notes": "Base model has 2 output labels, not 3. For full NLI (entailment/neutral/contradiction), consider cross-encoder/nli-deberta-v3-large instead. Current model still usable for binary entailment detection."
+      "test_num_labels": 3,
+      "test_vram_mib": 1307,
+      "test_results": {
+        "entailment": {"premise": "A man is eating pizza.", "hypothesis": "A man is eating food.", "prediction": "entailment", "correct": true},
+        "contradiction": {"premise": "The sky is blue.", "hypothesis": "The sky is green.", "prediction": "contradiction", "correct": true},
+        "neutral": {"premise": "A dog is running in the park.", "hypothesis": "The dog is brown.", "prediction": "neutral", "correct": true}
+      },
+      "test_notes": "Replaces microsoft/deberta-v3-large (base, 2 labels). NLI-finetuned with 3-class output. Download includes ONNX files (5.87 GB) which can be deleted to save disk."
+    },
+    "deberta-v3-large": {
+      "hf_id": "microsoft/deberta-v3-large",
+      "local_path": "models/deberta-v3-large/",
+      "role": "nli-base-deprecated",
+      "model_type": "deberta-v2",
+      "disk_gb": 2.97,
+      "test_status": "superseded",
+      "test_notes": "Base model with 2 output labels. Superseded by cross-encoder/nli-deberta-v3-large (3 labels). Can be deleted to free 2.97 GB disk."
     }
   }
 }
