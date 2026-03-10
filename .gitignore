@@ -1,0 +1,37 @@
+# Модели 
+models/
+*.bin
+*.safetensors
+*.gguf
+*.pt
+*.pth
+
+# Данные и корпус 
+corpus/
+indices/
+data/sciknoweval/raw/
+data/qasper/raw/
+*.parquet
+*.jsonl
+!configs/*.jsonl
+
+# Outputs
+outputs/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Secrets
+.env
+wandb/
