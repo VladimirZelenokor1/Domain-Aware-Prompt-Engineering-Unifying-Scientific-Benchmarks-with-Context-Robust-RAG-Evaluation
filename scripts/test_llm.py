@@ -77,79 +77,16 @@ def test_model(model_path, gpu_util=0.85, max_len=2048, enforce_eager=False):
     return result
 
 
-def test_long_context(model_path, gpu_util=0.85):
-    """Additional long-context test for Mistral-Nemo."""
-    print("\n--- Long-context test (10 passages, ~2000 tokens) ---")
-
-    passage = (
-        "Water is a chemical substance with the formula H2O. It is a transparent, "
-        "tasteless, odourless, and nearly colourless chemical substance. It is the "
-        "main constituent of Earth's hydrosphere and the fluids of all known living "
-        "organisms. It is vital for all known forms of life, even though it provides "
-        "neither food, energy, nor organic micronutrients. Its chemical formula, H2O, "
-        "indicates that each of its molecules contains one oxygen and two hydrogen atoms, "
-        "connected by covalent bonds. The hydrogen atoms are attached to the oxygen atom "
-        "at an angle of 104.45 degrees. Water is also a good solvent and is often referred "
-        "to as the universal solvent. Substances that dissolve in water are called hydrophilic. "
-        "Water molecules form hydrogen bonds with each other and are strongly polar. "
-    )
-
-    passages = []
-    for i in range(10):
-        passages.append(f"Passage {i+1}: {passage}")
-
-    context = "\n\n".join(passages)
-    prompt = (
-        f"Based on the following passages, answer the question.\n\n"
-        f"{context}\n\n"
-        f"Question: What angle do the hydrogen atoms form with the oxygen atom in water?\n"
-        f"Answer in one sentence."
-    )
-
-    llm = LLM(
-        model=model_path,
-        quantization="awq",
-        dtype="float16",
-        gpu_memory_utilization=gpu_util,
-        max_model_len=4096,
-    )
-
-    params = SamplingParams(temperature=0.0, max_tokens=128)
-    outputs = llm.generate([prompt], params)
-    text = outputs[0].outputs[0].text.strip()
-    print(f"Long-ctx output: \"{text[:200]}\"")
-
-    used, total = get_vram_used()
-    print(f"Long-ctx VRAM:   {used} / {total} MiB")
-
-    result = {
-        "long_ctx_output": text[:200],
-        "long_ctx_vram_mib": used,
-    }
-
-    del llm
-    cleanup()
-    used_after, _ = get_vram_used()
-    print(f"Cleanup:         OK (VRAM released to {used_after} MiB)")
-
-    return result
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("model_path")
     parser.add_argument("--gpu-util", type=float, default=0.85)
     parser.add_argument("--max-len", type=int, default=2048)
     parser.add_argument("--enforce-eager", action="store_true")
-    parser.add_argument("--long-context", action="store_true")
     parser.add_argument("--output-json", type=str, default=None)
     args = parser.parse_args()
 
     result = test_model(args.model_path, args.gpu_util, args.max_len, args.enforce_eager)
-
-    if args.long_context:
-        lc_result = test_long_context(args.model_path, args.gpu_util)
-        result.update(lc_result)
 
     if args.output_json:
         with open(args.output_json, "w") as f:
