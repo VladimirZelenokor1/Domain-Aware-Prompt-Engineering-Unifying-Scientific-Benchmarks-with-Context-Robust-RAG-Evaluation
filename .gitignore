@@ -1,5 +1,6 @@
-# Модели 
-models/
+# Модели
+models/*
+!models/MODEL_REGISTRY.json
 *.bin
 *.safetensors
 *.gguf
