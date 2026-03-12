@@ -6,7 +6,7 @@
   "transformers_version": "4.57.6",
   "sentence_transformers_version": "5.2.3",
   "torch_version": "2.10.0+cu128",
-  "notes": "Models tested sequentially with cleanup between each. Session 1 had ~2.5 GB desktop VRAM pressure; session 2 retested with clean VRAM (~989 MiB baseline).",
+  "notes": "4 LLMs + 3 auxiliary verified on RTX 4060 8GB. Gemma-2-9B and Mistral-Nemo-12B removed (OOM, do not fit on this hardware).",
   "llms": {
     "llama-3.2-3b-awq": {
       "hf_id": "AMead10/Llama-3.2-3B-Instruct-AWQ",
@@ -125,63 +125,6 @@
       "test_vram_mib": 7848,
       "test_output_contains_h2o": true,
       "test_notes": "OOM in session 1 (~2.5 GB desktop VRAM). Passed in session 2 with clean VRAM (~989 MiB baseline) at standard settings."
-    },
-    "gemma-2-9b-awq": {
-      "hf_id": "hugging-quants/gemma-2-9b-it-AWQ-INT4",
-      "base_model": "google/gemma-2-9b-it",
-      "local_path": "models/gemma-2-9b-awq/",
-      "role": "llm",
-      "model_type": "gemma2",
-      "architecture": "Gemma2ForCausalLM",
-      "params_b": 9.0,
-      "quantization": "awq_marlin",
-      "bits": 4,
-      "zero_point": true,
-      "hidden_size": 3584,
-      "num_layers": 42,
-      "num_heads": 16,
-      "vocab_size": 256000,
-      "max_position_embeddings": 8192,
-      "disk_gb": 5.77,
-      "license": "gemma",
-      "test_status": "oom",
-      "test_settings": {
-        "backend": "vllm",
-        "quantization": "awq_marlin",
-        "gpu_memory_utilization": 0.85,
-        "max_model_len": 512,
-        "enforce_eager": true,
-        "dtype": "bfloat16"
-      },
-      "test_notes": "Does not fit on RTX 4060 8GB. Model weights take 5.78 GiB, leaving no room for KV cache even with enforce_eager and min context. Requires awq_marlin (not awq) due to Gemma2 bfloat16 requirement. Tried: 0.90/2048 (startup fail), 0.85/2048 (KV -0.99 GiB), 0.95/512/eager (startup fail), 0.85/512/eager (KV -0.14 GiB). Options: GGUF with partial offload, exclude from experiment, or cloud GPU."
-    },
-    "mistral-nemo-12b-awq": {
-      "hf_id": "casperhansen/mistral-nemo-instruct-2407-awq",
-      "base_model": "mistralai/Mistral-Nemo-Instruct-2407",
-      "local_path": "models/mistral-nemo-12b-awq/",
-      "role": "llm",
-      "model_type": "mistral",
-      "architecture": "MistralForCausalLM",
-      "params_b": 12.0,
-      "quantization": "awq",
-      "bits": 4,
-      "zero_point": true,
-      "hidden_size": 5120,
-      "num_layers": 40,
-      "num_heads": 32,
-      "vocab_size": 131072,
-      "max_position_embeddings": 1024000,
-      "disk_gb": 7.79,
-      "license": "apache-2.0",
-      "test_status": "oom",
-      "test_settings": {
-        "backend": "vllm",
-        "gpu_memory_utilization": 0.85,
-        "max_model_len": 2048,
-        "enforce_eager": true,
-        "dtype": "float16"
-      },
-      "test_notes": "Does not fit on RTX 4060 8GB. Model weights take 8.08 GiB - exceeds total GPU memory (8.0 GiB). Tested with clean VRAM (~664 MiB baseline). No vLLM settings can make this work. Options: GGUF with partial GPU offload, exclude from experiment, or cloud GPU."
     }
   },
   "auxiliary": {
@@ -234,7 +177,6 @@
       "vocab_size": 128100,
       "max_position_embeddings": 512,
       "disk_gb": 1.67,
-      "disk_gb_with_onnx": 8.98,
       "license": "mit",
       "library": "transformers (AutoModelForSequenceClassification) or sentence-transformers (CrossEncoder)",
       "id2label": {"0": "contradiction", "1": "entailment", "2": "neutral"},
@@ -246,16 +188,7 @@
         "contradiction": {"premise": "The sky is blue.", "hypothesis": "The sky is green.", "prediction": "contradiction", "correct": true},
         "neutral": {"premise": "A dog is running in the park.", "hypothesis": "The dog is brown.", "prediction": "neutral", "correct": true}
       },
-      "test_notes": "Replaces microsoft/deberta-v3-large (base, 2 labels). NLI-finetuned with 3-class output. Download includes ONNX files (5.87 GB) which can be deleted to save disk."
-    },
-    "deberta-v3-large": {
-      "hf_id": "microsoft/deberta-v3-large",
-      "local_path": "models/deberta-v3-large/",
-      "role": "nli-base-deprecated",
-      "model_type": "deberta-v2",
-      "disk_gb": 2.97,
-      "test_status": "superseded",
-      "test_notes": "Base model with 2 output labels. Superseded by cross-encoder/nli-deberta-v3-large (3 labels). Can be deleted to free 2.97 GB disk."
+      "test_notes": "Replaces microsoft/deberta-v3-large (base, 2 labels). NLI-finetuned with 3-class output."
     }
   }
 }
