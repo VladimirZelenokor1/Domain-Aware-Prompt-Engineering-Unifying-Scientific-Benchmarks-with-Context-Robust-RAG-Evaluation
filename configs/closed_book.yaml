@@ -21,14 +21,6 @@ models:
     path: models/deepseek-r1-qwen-7b-awq
     quantization: awq
     gpu_memory_utilization: 0.90
-  gemma-2-9b:
-    path: models/gemma-2-9b-awq
-    quantization: awq
-    gpu_memory_utilization: 0.85
-  mistral-nemo-12b:
-    path: models/mistral-nemo-12b-awq
-    quantization: awq
-    gpu_memory_utilization: 0.90
 
 strategies:
   - da

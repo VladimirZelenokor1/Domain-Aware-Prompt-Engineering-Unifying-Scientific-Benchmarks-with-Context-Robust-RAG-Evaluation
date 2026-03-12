@@ -126,9 +126,8 @@ def test_deberta_nli(model_path: str) -> dict:
         logits = outputs.logits
         probs = torch.softmax(logits, dim=-1)
 
-    # DeBERTa-v3-large labels: 0=entailment, 1=neutral, 2=contradiction
-    # (check model config for actual label mapping)
-    labels = ["entailment", "neutral", "contradiction"]
+    # cross-encoder/nli-deberta-v3-large labels: 0=contradiction, 1=entailment, 2=neutral
+    labels = ["contradiction", "entailment", "neutral"]
     pred_idx = probs.argmax().item()
     pred_label = labels[pred_idx] if pred_idx < len(labels) else f"label_{pred_idx}"
 
@@ -136,9 +135,7 @@ def test_deberta_nli(model_path: str) -> dict:
     print(f"Hypothesis:  \"{hypothesis}\"")
     print(f"Prediction:  {pred_label} (probs: {probs[0].tolist()})")
 
-    # For base DeBERTa (not fine-tuned on NLI), output may not be meaningful
-    # We just verify the model loads and produces 3-class output
-    output_ok = logits.shape[-1] >= 2  # at least 2 classes
+    output_ok = logits.shape[-1] == 3
     print(f"Output check: {'OK' if output_ok else 'FAIL'} (shape: {logits.shape})")
 
     used, total = get_vram()
@@ -166,7 +163,7 @@ if __name__ == "__main__":
 
     results["bge_embedding"] = test_bge_embedding("models/bge-base-en-v1.5/")
     results["bge_reranker"] = test_bge_reranker("models/bge-reranker-v2-m3/")
-    results["deberta_nli"] = test_deberta_nli("models/deberta-v3-large/")
+    results["deberta_nli"] = test_deberta_nli("models/nli-deberta-v3-large/")
 
     with open("/tmp/test_auxiliary.json", "w") as f:
         json.dump(results, f, indent=2)
