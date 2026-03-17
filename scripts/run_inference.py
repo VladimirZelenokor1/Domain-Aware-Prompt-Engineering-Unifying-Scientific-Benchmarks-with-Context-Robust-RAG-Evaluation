@@ -10,6 +10,15 @@ Usage:
 
 from __future__ import annotations
 
+# Ensure CC is set early for triton kernel compilation in vLLM spawned
+# subprocesses (WSL2 uses 'spawn' multiprocessing which loses PATH context).
+import os as _os
+import shutil as _shutil
+
+if "CC" not in _os.environ:
+    _cc = _shutil.which("gcc") or _shutil.which("cc") or "/usr/bin/gcc"
+    _os.environ["CC"] = _cc
+
 import argparse
 import gc
 import json
@@ -230,7 +239,8 @@ def create_engine(model_cfg: dict, seed: int = 42) -> LLM:
     """Create vLLM LLM instance.
 
     Args:
-        model_cfg: Dict with path, quantization, gpu_memory_utilization.
+        model_cfg: Dict with path, quantization, gpu_memory_utilization,
+                   max_model_len, enforce_eager, dtype.
         seed: Global random seed.
 
     Returns:
@@ -239,21 +249,35 @@ def create_engine(model_cfg: dict, seed: int = 42) -> LLM:
     from vllm import LLM as _LLM
 
     model_path = str(PROJECT_ROOT / model_cfg["path"])
+    dtype = model_cfg.get("dtype", "auto")
+    max_model_len = model_cfg.get("max_model_len")
+    gpu_mem = model_cfg.get("gpu_memory_utilization", 0.85)
+    enforce_eager = model_cfg.get("enforce_eager", False)
+
     logger.info(
-        "Loading model from %s (quantization=%s, gpu_mem=%.2f)",
+        "Loading model from %s (quantization=%s, gpu_mem=%.2f, "
+        "max_model_len=%s, enforce_eager=%s, dtype=%s)",
         model_path,
         model_cfg.get("quantization"),
-        model_cfg.get("gpu_memory_utilization", 0.9),
+        gpu_mem,
+        max_model_len,
+        enforce_eager,
+        dtype,
     )
-    return _LLM(
-        model=model_path,
-        quantization=model_cfg.get("quantization"),
-        gpu_memory_utilization=model_cfg.get("gpu_memory_utilization", 0.9),
-        seed=seed,
-        trust_remote_code=model_cfg.get("trust_remote_code", False),
-        enforce_eager=model_cfg.get("enforce_eager", False),
-        dtype="auto",
-    )
+
+    kwargs: dict[str, Any] = {
+        "model": model_path,
+        "quantization": model_cfg.get("quantization"),
+        "gpu_memory_utilization": gpu_mem,
+        "seed": seed,
+        "trust_remote_code": model_cfg.get("trust_remote_code", False),
+        "enforce_eager": enforce_eager,
+        "dtype": dtype,
+    }
+    if max_model_len is not None:
+        kwargs["max_model_len"] = max_model_len
+
+    return _LLM(**kwargs)
 
 
 def create_sampling_params(strategy: str, config: dict) -> SamplingParams:
@@ -410,6 +434,41 @@ class _MockSamplingParams:
 # =========================================================================
 # Inference execution
 # =========================================================================
+
+def truncate_long_prompts(
+    prompts: list[str],
+    max_model_len: int,
+    max_tokens: int,
+    tokenizer: Any,
+) -> list[str]:
+    """Truncate prompts that would exceed the model's context window.
+
+    Args:
+        prompts: List of prompt strings.
+        max_model_len: Maximum sequence length for the model.
+        max_tokens: Number of tokens reserved for generation.
+        tokenizer: Tokenizer with encode/decode methods.
+
+    Returns:
+        List of prompts (truncated where necessary).
+    """
+    max_prompt_tokens = max_model_len - max_tokens
+    truncated_count = 0
+    result = []
+    for prompt in prompts:
+        token_ids = tokenizer.encode(prompt)
+        if len(token_ids) > max_prompt_tokens:
+            token_ids = token_ids[:max_prompt_tokens]
+            prompt = tokenizer.decode(token_ids)
+            truncated_count += 1
+        result.append(prompt)
+    if truncated_count > 0:
+        logger.warning(
+            "Truncated %d/%d prompts to fit max_model_len=%d (max_prompt_tokens=%d)",
+            truncated_count, len(prompts), max_model_len, max_prompt_tokens,
+        )
+    return result
+
 
 def run_batch(
     llm: Any,
@@ -717,6 +776,17 @@ def run_cell(
 
         # Build prompts
         prompts = build_prompts_batch(chunk_records, strategy)
+
+        # Truncate prompts that exceed context window (safety net)
+        if not mock and hasattr(engine, "get_tokenizer"):
+            model_cfg_for_trunc = get_model_config(config, model_name)
+            max_ml = model_cfg_for_trunc.get("max_model_len", 4096)
+            prompts = truncate_long_prompts(
+                prompts,
+                max_model_len=max_ml,
+                max_tokens=inf_config["max_tokens"],
+                tokenizer=engine.get_tokenizer(),
+            )
 
         # Run inference
         logger.info(

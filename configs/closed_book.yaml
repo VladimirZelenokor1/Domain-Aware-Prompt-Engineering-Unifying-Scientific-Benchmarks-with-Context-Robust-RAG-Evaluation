@@ -8,19 +8,31 @@ models:
   llama-3.2-3b:
     path: models/llama-3.2-3b-awq
     quantization: awq
-    gpu_memory_utilization: 0.90
+    gpu_memory_utilization: 0.85
+    max_model_len: 4096
+    enforce_eager: true
+    dtype: float16
   qwen2.5-7b:
     path: models/qwen2.5-7b-awq
     quantization: awq
-    gpu_memory_utilization: 0.90
+    gpu_memory_utilization: 0.85
+    max_model_len: 2048
+    enforce_eager: true
+    dtype: float16
   sciphi-mistral-7b:
     path: models/sciphi-mistral-7b-awq
     quantization: awq
-    gpu_memory_utilization: 0.90
+    gpu_memory_utilization: 0.85
+    max_model_len: 2048
+    enforce_eager: true
+    dtype: float16
   deepseek-r1-qwen-7b:
     path: models/deepseek-r1-qwen-7b-awq
     quantization: awq
-    gpu_memory_utilization: 0.90
+    gpu_memory_utilization: 0.85
+    max_model_len: 1792
+    enforce_eager: true
+    dtype: float16
 
 strategies:
   - da
