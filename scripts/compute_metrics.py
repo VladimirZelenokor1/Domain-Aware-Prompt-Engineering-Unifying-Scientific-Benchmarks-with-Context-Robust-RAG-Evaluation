@@ -35,8 +35,8 @@ PROJECT_ROOT = _SCRIPTS_DIR.parent
 # Question types where EM compares letter labels only
 MC_TYPES = {"mcq-4-choices", "mcq-2-choices"}
 TF_TYPE = "true_or_false"
-# Types where ROUGE-L / BLEU are meaningful
-TEXT_TYPES = {"open-ended-qa", "filling", "relation_extraction"}
+# Types where ROUGE-L / BLEU are meaningful (anything non-MC)
+TEXT_TYPES = {"open-ended-qa", "filling", "relation_extraction", "true_or_false"}
 
 
 # =========================================================================
@@ -338,25 +338,26 @@ def build_summary_table(all_metrics: list[dict]) -> list[dict]:
 
 def print_summary(summary: list[dict]) -> None:
     """Pretty-print summary table to console."""
-    print("\n" + "=" * 80)
+    print("\n" + "=" * 85)
     print("CLOSED-BOOK RESULTS (dev.json)")
-    print("=" * 80)
-    header = f"{'Model':<22} {'Strategy':<10} {'Parse%':>8} {'EM':>8} {'ROUGE-L':>9} {'BLEU-4':>8}"
+    print("ROUGE-L and BLEU-4 computed on non-MC questions only (open-ended, T/F, fill, relext)")
+    print("=" * 85)
+    header = f"{'Model':<22} {'Strategy':<10} {'Parse%':>8} {'EM':>8} {'ROUGE-L*':>10} {'BLEU-4*':>9}"
     print(header)
-    print("-" * 80)
+    print("-" * 85)
 
     for row in summary:
-        rouge = f"{row['rouge_l_f1']:.4f}" if "rouge_l_f1" in row else "   n/a"
-        bleu = f"{row['bleu_4']:.4f}" if "bleu_4" in row else "  n/a"
+        rouge = f"{row['rouge_l_f1']:.4f}" if "rouge_l_f1" in row else "     n/a"
+        bleu = f"{row['bleu_4']:.4f}" if "bleu_4" in row else "    n/a"
         print(
             f"{row['model']:<22} {row['strategy']:<10} "
             f"{row['parse_rate'] * 100:>7.1f}% "
             f"{row['exact_match']:>8.4f} "
-            f"{rouge:>9} "
-            f"{bleu:>8}"
+            f"{rouge:>10} "
+            f"{bleu:>9}"
         )
 
-    print("-" * 80)
+    print("-" * 85)
 
     # Best EM
     best_em = max(summary, key=lambda r: r["exact_match"])
