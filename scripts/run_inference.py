@@ -280,12 +280,16 @@ def create_engine(model_cfg: dict, seed: int = 42) -> LLM:
     return _LLM(**kwargs)
 
 
-def create_sampling_params(strategy: str, config: dict) -> SamplingParams:
+def create_sampling_params(
+    strategy: str, config: dict, model_cfg: dict | None = None,
+) -> SamplingParams:
     """Create SamplingParams based on strategy.
 
     Args:
         strategy: One of da, ras, ctl, sc.
         config: Full experiment config dict.
+        model_cfg: Optional model config dict with per-model overrides
+                   (e.g. max_tokens).
 
     Returns:
         vllm.SamplingParams instance.
@@ -293,16 +297,21 @@ def create_sampling_params(strategy: str, config: dict) -> SamplingParams:
     from vllm import SamplingParams as _SamplingParams
 
     inf = config["inference"]
+    # Per-model max_tokens override (e.g. deepseek-r1 needs more tokens)
+    max_tokens = inf["max_tokens"]
+    if model_cfg and "max_tokens" in model_cfg:
+        max_tokens = model_cfg["max_tokens"]
+
     if strategy == "sc":
         return _SamplingParams(
             temperature=inf["temperature_sc"],
-            max_tokens=inf["max_tokens"],
+            max_tokens=max_tokens,
             seed=inf["seed"],
             n=inf["sc_samples"],
         )
     return _SamplingParams(
         temperature=inf["temperature_greedy"],
-        max_tokens=inf["max_tokens"],
+        max_tokens=max_tokens,
         seed=inf["seed"],
         n=1,
     )
@@ -739,13 +748,16 @@ def run_cell(
         )
         dataset = dataset[existing:]
 
+    # Resolve model config (for per-model overrides like max_tokens)
+    model_cfg = get_model_config(config, model_name) if not mock else {}
+    effective_max_tokens = model_cfg.get("max_tokens", inf_config["max_tokens"])
+
     # Create engine
     owns_engine = False
     if engine is None:
         if mock:
             engine = MockLLM(records=dataset)
         else:
-            model_cfg = get_model_config(config, model_name)
             engine = create_engine(model_cfg, seed=inf_config["seed"])
         owns_engine = True
 
@@ -753,13 +765,13 @@ def run_cell(
     if mock:
         params = _MockSamplingParams(
             temperature=inf_config["temperature_sc"] if strategy == "sc" else inf_config["temperature_greedy"],
-            max_tokens=inf_config["max_tokens"],
+            max_tokens=effective_max_tokens,
             seed=inf_config["seed"],
             n=inf_config["sc_samples"] if strategy == "sc" else 1,
         )
         params._strategy = strategy
     else:
-        params = create_sampling_params(strategy, config)
+        params = create_sampling_params(strategy, config, model_cfg)
 
     # Process in checkpoint-sized chunks
     chunk_size = inf_config.get("checkpoint_every", 500)
@@ -779,12 +791,11 @@ def run_cell(
 
         # Truncate prompts that exceed context window (safety net)
         if not mock and hasattr(engine, "get_tokenizer"):
-            model_cfg_for_trunc = get_model_config(config, model_name)
-            max_ml = model_cfg_for_trunc.get("max_model_len", 4096)
+            max_ml = model_cfg.get("max_model_len", 4096)
             prompts = truncate_long_prompts(
                 prompts,
                 max_model_len=max_ml,
-                max_tokens=inf_config["max_tokens"],
+                max_tokens=effective_max_tokens,
                 tokenizer=engine.get_tokenizer(),
             )
 

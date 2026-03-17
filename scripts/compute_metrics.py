@@ -240,10 +240,13 @@ def compute_cell_metrics(records: list[dict]) -> dict[str, Any]:
 
         em_count = sum(1 for e in entries if e["em"])
         parse_count = sum(1 for e in entries if e["parse_success"])
+        # EM on parsed-only subset (accuracy independent of formatting)
+        parsed_correct = sum(1 for e in entries if e["parse_success"] and e["em"])
 
         result: dict[str, Any] = {
             "count": n,
             "exact_match": round(em_count / n, 4),
+            "em_parsed": round(parsed_correct / parse_count, 4) if parse_count else 0.0,
             "parse_rate": round(parse_count / n, 4),
         }
 
@@ -327,6 +330,7 @@ def build_summary_table(all_metrics: list[dict]) -> list[dict]:
             "total": m["total_questions"],
             "parse_rate": m["parse_rate"],
             "exact_match": m["overall"]["exact_match"],
+            "em_parsed": m["overall"]["em_parsed"],
         }
         if "rouge_l_f1" in m["overall"]:
             row["rouge_l_f1"] = m["overall"]["rouge_l_f1"]
@@ -341,10 +345,10 @@ def print_summary(summary: list[dict]) -> None:
     print("\n" + "=" * 85)
     print("CLOSED-BOOK RESULTS (dev.json)")
     print("ROUGE-L and BLEU-4 computed on non-MC questions only (open-ended, T/F, fill, relext)")
-    print("=" * 85)
-    header = f"{'Model':<22} {'Strategy':<10} {'Parse%':>8} {'EM':>8} {'ROUGE-L*':>10} {'BLEU-4*':>9}"
+    print("=" * 95)
+    header = f"{'Model':<22} {'Strategy':<10} {'Parse%':>8} {'EM':>8} {'EM_parsed':>10} {'ROUGE-L*':>10} {'BLEU-4*':>9}"
     print(header)
-    print("-" * 85)
+    print("-" * 95)
 
     for row in summary:
         rouge = f"{row['rouge_l_f1']:.4f}" if "rouge_l_f1" in row else "     n/a"
@@ -353,11 +357,12 @@ def print_summary(summary: list[dict]) -> None:
             f"{row['model']:<22} {row['strategy']:<10} "
             f"{row['parse_rate'] * 100:>7.1f}% "
             f"{row['exact_match']:>8.4f} "
+            f"{row['em_parsed']:>10.4f} "
             f"{rouge:>10} "
             f"{bleu:>9}"
         )
 
-    print("-" * 85)
+    print("-" * 95)
 
     # Best EM
     best_em = max(summary, key=lambda r: r["exact_match"])
