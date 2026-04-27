@@ -1,0 +1,75 @@
+# Noise composition for RAG experiments (thesis Section 4.5).
+#
+# Four noise levels. Each level declares how many of the top-k retrieved
+# passages are replaced with noise, and the per-type mix used for the
+# replacements.
+#
+# Composition keys:
+#   irrelevant                  -> opposite-domain distractor from corpus
+#   injection                   -> prompt-injection fragment in scientific text
+#   contradictory               -> LLM-generated passage contradicting the answer
+#   contradictory_or_injection  -> random one-of
+#   any                         -> random one of {irrelevant, injection, contradictory}
+#
+# Noise positions are shuffled within top-k under a stable per-question
+# seed so assembly is reproducible across runs.
+
+noise:
+  seed: 42
+  top_k: 10
+  positioning: shuffled
+
+  levels:
+    "0.0":
+      replaced: 0
+      composition: {}
+
+    "0.2":
+      replaced: 2            # 2 of 10 passages
+      composition:
+        irrelevant: 1
+        contradictory_or_injection: 1
+
+    "0.4":
+      replaced: 4            # 4 of 10 passages; at least 1 of each fixed type
+      composition:
+        irrelevant: 1
+        contradictory: 1
+        injection: 1
+        any: 1
+
+    "0.6":
+      replaced: 6            # 6 of 10 passages; 2 of each fixed type
+      composition:
+        irrelevant: 2
+        contradictory: 2
+        injection: 2
+
+  pools:
+    irrelevant: corpus/noise/irrelevant_distractors.jsonl
+    injection: corpus/noise/injection_passages.jsonl
+    contradictory: corpus/noise/contradictory_passages.jsonl    # populated after Phase 3 (GPU needed)
+
+  # Contradictory-passage quality gate (recorded BEFORE any review is
+  # conducted, 2026-04-21). The threshold cannot be lowered to match an
+  # observed rate after the fact: if the manual review comes back below
+  # this floor, the only valid response is (a) refine the generation
+  # prompt, regenerate, and re-review - NEVER (b) relax the threshold.
+  #
+  # Enforcement:
+  # - build_noise.py contradictory-review writes
+  #   outputs/noise_review/contradictory_review_stats.json with the
+  #   observed acceptance_rate and per-template / per-domain breakdowns.
+  # - run_rag_inference.py asserts at startup that the pool file exists,
+  #   that the stats file exists, and that acceptance_rate >= the value
+  #   below. On failure it exits 2 with a message pointing at both.
+  # - Any change to min_acceptance_rate must go through review in git
+  #   history (PR with explicit rationale); a silent numeric edit
+  #   followed by a re-run is a process violation.
+  contradictory:
+    min_acceptance_rate: 0.80
+    review_sample_size: 50
+    review_csv_path: outputs/noise_review/contradictory_review.csv
+    review_stats_path: outputs/noise_review/contradictory_review_stats.json
+    lockdown_policy: "below-threshold -> regenerate with refined prompt and re-review; never lower the threshold"
+    recorded_at: 2026-04-21

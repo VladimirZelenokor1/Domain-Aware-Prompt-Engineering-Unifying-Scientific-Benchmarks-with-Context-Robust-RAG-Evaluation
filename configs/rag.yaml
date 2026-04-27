@@ -1,0 +1,71 @@
+# RAG experiment configuration (stub; filled in during Phase 5/6).
+#
+# Inherits model specs, prompting strategies, and inference parameters from
+# closed_book.yaml. This file only adds the RAG-specific axes (retriever,
+# noise level, noise composition) and the split selection for Track A and
+# Track B.
+#
+# Populated:  Phase 1 (this stub - 3 surviving models, placeholder axes).
+# To finish:  Phase 5 (fill noise_config path), Phase 6 (full factorial
+#             and fractional design matrices per thesis Section 3.12).
+
+experiment: rag
+
+data:
+  track_a:
+    dev: data/sciknoweval/dev.json
+    main_test_retrievable: data/sciknoweval/main_test_retrievable.json  # built in Phase 3
+  track_b:
+    sample: data/qasper/sample.json   # built in Phase 9
+
+models:
+  # Mirrors configs/closed_book.yaml after the Phase 1 cleanup. Keep in sync.
+  llama-3.2-3b:
+    path: models/llama-3.2-3b-awq
+    quantization: awq
+    gpu_memory_utilization: 0.85
+    max_model_len: 4096
+    enforce_eager: true
+    dtype: float16
+  qwen2.5-7b:
+    path: models/qwen2.5-7b-awq
+    quantization: awq
+    gpu_memory_utilization: 0.85
+    max_model_len: 2048
+    enforce_eager: true
+    dtype: float16
+  sciphi-mistral-7b:
+    path: models/sciphi-mistral-7b-awq
+    quantization: awq
+    gpu_memory_utilization: 0.85
+    max_model_len: 2048
+    enforce_eager: true
+    dtype: float16
+
+strategies:
+  - da
+  - ras
+  - ctl
+  - sc
+
+retrievers:
+  - bm25
+  - dense
+  - hybrid    # canonical retriever for the main RAG matrix
+
+noise:
+  config: configs/noise.yaml     # created in Phase 5
+  levels: [0.0, 0.2, 0.4, 0.6]
+
+inference:
+  seed: 42
+  max_tokens: 1024
+  temperature_greedy: 0.0
+  temperature_sc: 0.7
+  sc_samples: 5
+  sc_min_valid: 3
+  top_k_passages: 10
+  checkpoint_every: 500
+
+output:
+  base_dir: outputs/rag_main

@@ -1,0 +1,68 @@
+# LLM-judge panel configuration (Variant D: automatic-only reliability).
+#
+# Populated:  Phase 1 (this stub - panel architecture declared).
+# To finish:  Phase 7 (rubric prompts, API endpoints, retry/backoff parameters,
+#             calibration budget cap, perturbation protocol details).
+#
+# Panel architecture:
+#   - Two open-weight judges (judge_a, judge_b) score the full main_test
+#     outputs. They must be distinct from every examinee model family to
+#     preserve judge-examinee independence.
+#   - One proprietary judge (judge_c) scores a bounded calibration subset
+#     (dev + holdout audit). Used for ECE calibration and Krippendorff's
+#     alpha(A, B, C).
+
+main_set_judges:
+  - id: judge_a
+    model: llama-3.1-8b-instruct-awq    # subject to VRAM check in Phase 7.1
+    role: open_weight_primary
+    must_differ_from_examinees: true
+    hf_id_candidate: solidrust/Llama-3.1-8B-Instruct-AWQ-INT4
+    fallback_if_oom: qwen2-7b-instruct-awq   # NOT Qwen2.5 (examinee family)
+  - id: judge_b
+    model: mistral-7b-instruct-v0.3-awq  # distinct checkpoint from SciPhi-Mistral-7B-32k
+    role: open_weight_secondary
+    must_differ_from_examinees: true
+    hf_id_candidate: solidrust/Mistral-7B-Instruct-v0.3-AWQ
+
+calibration_judge:
+  id: judge_c
+  model: gpt-4o                           # or claude-sonnet-4; finalise at Phase 7.4
+  role: proprietary_calibration
+  scope: dev_set + holdout_audit
+  max_items: 1000
+  cost_cap_usd: 100                       # hard stop per Ground Rule 4 / Decision Point 7.4
+  api:
+    rate_limit_rps: 2                     # placeholder
+    max_retries: 5
+    backoff: exponential
+  cache:
+    enabled: true
+    key: [item_id, judge_model_version, prompt_template_hash]
+
+scoring:
+  rubric_scale: [0, 1, 2, 3, 4, 5]        # six-point per thesis Section 3.7.1
+  judge_temperature: 0.0
+  judge_seed: 42
+  metrics:
+    - rubric_score                         # 0-5 per criterion
+    - faithfulness                         # NLI entailment on decomposed claims
+    - citation_precision
+    - citation_recall
+    - coverage                             # key-point matching
+    - self_confidence                      # judge-reported, 0-1
+
+nli:
+  model: cross-encoder/nli-deberta-v3-large
+  label_order: [contradiction, entailment, neutral]
+
+perturbations:
+  class_1_surface:                         # typos, whitespace, light paraphrase
+    enabled: true
+  class_2_semantic:                        # entity swap, negation flip
+    enabled: true
+  audit_subset_size: 200                   # bounded by calibration budget
+
+prompt_templates:
+  dir: configs/judge_prompts                # filled in Phase 7
+  hash_algorithm: sha256

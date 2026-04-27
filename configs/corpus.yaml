@@ -1,0 +1,182 @@
+# Corpus building configuration
+# Domain keywords for article classification, dedup params, source configs.
+
+corpus:
+  chunk_size: 256
+  chunk_overlap: 64
+  tokenizer: cl100k_base
+  output_dir: corpus
+  seed: 42
+
+sources:
+  wikipedia:
+    dataset: wikimedia/wikipedia
+    config: "20231101.en"
+    min_article_words: 200
+    output: wikipedia_chunks.jsonl
+  pubmed:
+    dataset: ccdv/pubmed-summarization
+    split: train
+    output: pubmed_chunks.jsonl
+  openstax:
+    dataset: HuggingFaceTB/openstax_paragraphs
+    output: openstax_chunks.jsonl
+
+dedup:
+  exact: true
+  near_duplicate:
+    enabled: true
+    num_perm: 128
+    threshold: 0.9
+    shingle_size: 3
+
+domains:
+  biology:
+    - biology
+    - biological
+    - cell biology
+    - gene
+    - genetic
+    - protein
+    - enzyme
+    - organism
+    - species
+    - ecology
+    - evolution
+    - evolutionary
+    - dna
+    - rna
+    - neuroscience
+    - anatomy
+    - physiology
+    - microbiology
+    - zoology
+    - botany
+    - pathogen
+    - virus
+    - bacteria
+    - immunology
+    - photosynthesis
+    - genome
+    - genomic
+    - taxonomy
+    - mitosis
+    - meiosis
+    - bioinformatics
+    - molecular biology
+    - biochemistry
+    - epidemiology
+    - cytology
+    - histology
+    - phylogenetics
+
+  chemistry:
+    - chemistry
+    - chemical
+    - molecule
+    - molecular
+    - reaction
+    - compound
+    - element
+    - periodic table
+    - organic chemistry
+    - inorganic chemistry
+    - polymer
+    - catalysis
+    - catalyst
+    - oxidation
+    - reduction
+    - electrochemistry
+    - spectroscopy
+    - stoichiometry
+    - thermochemistry
+    - bonding
+    - covalent
+    - ionic
+    - chemical equilibrium
+    - titration
+    - chromatography
+    - isomer
+    - stereochemistry
+
+  physics:
+    - physics
+    - quantum
+    - quantum mechanics
+    - relativity
+    - thermodynamics
+    - electromagnetism
+    - electromagnetic
+    - mechanics
+    - particle physics
+    - photon
+    - electron
+    - neutron
+    - proton
+    - gravity
+    - gravitational
+    - wave
+    - optics
+    - nuclear physics
+    - semiconductor
+    - entropy
+    - momentum
+    - acceleration
+    - velocity
+    - kinetic energy
+    - potential energy
+    - magnetism
+    - superconductivity
+    - astrophysics
+    - cosmology
+
+  materials_science:
+    - materials science
+    - alloy
+    - ceramic
+    - composite material
+    - crystal structure
+    - crystallography
+    - metallurgy
+    - nanotechnology
+    - nanomaterial
+    - thin film
+    - corrosion
+    - biomaterial
+    - graphene
+    - microstructure
+    - polymer science
+    - tribology
+    - fracture mechanics
+    - materials engineering
+
+  earth_science:
+    - geology
+    - geological
+    - geophysics
+    - meteorology
+    - oceanography
+    - climatology
+    - seismology
+    - volcano
+    - volcanic
+    - earthquake
+    - mineral
+    - mineralogy
+    - tectonic
+    - plate tectonics
+    - sedimentary
+    - igneous
+    - metamorphic
+    - atmosphere
+    - atmospheric
+    - paleontology
+    - fossil
+    - glacier
+    - glaciology
+    - hydrology
+    - stratigraphy
+    - geochemistry
+    - petrology
+    - astronomy
+    - astronomical
