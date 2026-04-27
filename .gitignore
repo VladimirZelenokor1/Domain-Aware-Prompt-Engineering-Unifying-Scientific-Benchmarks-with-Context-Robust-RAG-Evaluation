@@ -19,6 +19,13 @@ data/qasper/raw/
 # Outputs
 outputs/
 
+# Logs and Windows redirect artifacts
+*.log
+nul
+
+# Retrievability cache (regenerable on server)
+data/sciknoweval/.retrievability_cache/
+
 # Python
 __pycache__/
 *.pyc
