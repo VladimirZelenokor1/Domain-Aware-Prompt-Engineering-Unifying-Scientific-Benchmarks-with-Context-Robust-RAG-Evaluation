@@ -1,0 +1,56 @@
+# Server requirements (innodatahub A100 40GB MIG, CUDA 12.5 host driver, Python 3.10).
+#
+# Differs from requirements.txt (which mirrors local Windows machine with torch 2.10+cu128).
+#
+# Install order:
+#   1. python -m venv venv-thesis && source venv-thesis/bin/activate
+#   2. pip install --upgrade pip setuptools wheel
+#   3. pip install torch==2.4.1 torchvision==0.19.1 torchaudio==2.4.1 --index-url https://download.pytorch.org/whl/cu121
+#   4. pip install -r requirements-server.txt
+#   5. pip install torchaudio==2.4.0 --index-url https://download.pytorch.org/whl/cu121  (vLLM 0.6.3 pins torch==2.4.0)
+#   6. pip install "huggingface_hub==0.26.2"  (compat with transformers 4.45.2)
+#
+# Java: install JDK 21 via conda (NOT JRE - pyjnius requires javac):
+#   conda create -y -p ~/persistent_volume/thesis/jdk-env -c conda-forge openjdk=21
+#   export JAVA_HOME=$HOME/persistent_volume/thesis/jdk-env/lib/jvm
+#
+# vLLM stack
+vllm==0.6.3
+transformers==4.45.2
+accelerate==1.0.1
+sentence-transformers==3.2.1
+huggingface_hub==0.26.2
+datasets==3.0.2
+tokenizers==0.20.1
+
+# Quantization
+autoawq==0.2.7.post2
+
+# Retrieval
+faiss-cpu==1.9.0
+pyserini==0.43.0
+elasticsearch==8.15.1
+
+# Tokenization / NLI
+sentencepiece==0.2.0
+protobuf==5.28.3
+
+# Utils
+numpy==1.26.4
+pyyaml==6.0.2
+tqdm==4.66.5
+typer==0.12.5
+rich==13.9.4
+orjson==3.10.10
+
+# Metrics & stats
+scikit-learn==1.5.2
+scipy==1.14.1
+pandas==2.2.3
+nltk==3.9.1
+rouge-score==0.1.2
+sacrebleu==2.4.3
+
+# Tests
+pytest==8.3.3
+pytest-asyncio==0.24.0
