@@ -23,6 +23,11 @@ outputs/
 *.log
 nul
 
+# Transfer archives (created on demand for server upload, never commit)
+*.tar.gz
+*.tar
+*.zip
+
 # Retrievability cache (regenerable on server)
 data/sciknoweval/.retrievability_cache/
 
