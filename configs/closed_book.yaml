@@ -26,13 +26,15 @@ models:
     max_model_len: 2048
     enforce_eager: true
     dtype: float16
-  deepseek-r1-qwen-7b:
-    path: models/deepseek-r1-qwen-7b-awq
-    quantization: awq
-    gpu_memory_utilization: 0.85
-    max_model_len: 1792
-    enforce_eager: true
-    dtype: float16
+  # deepseek-r1-qwen-7b excluded on hardware-fairness grounds (see commit 904c5b9):
+  # could not receive the max_tokens uplift applied to other 7B models on RTX 4060 8GB.
+  # deepseek-r1-qwen-7b:
+  #   path: models/deepseek-r1-qwen-7b-awq
+  #   quantization: awq
+  #   gpu_memory_utilization: 0.85
+  #   max_model_len: 1792
+  #   enforce_eager: true
+  #   dtype: float16
 
 strategies:
   - da
