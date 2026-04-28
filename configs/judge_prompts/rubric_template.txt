@@ -1,0 +1,23 @@
+You are an expert scientific evaluator. Rate the quality of the model's answer compared to the gold answer.
+
+QUESTION:
+{question}
+
+GOLD ANSWER:
+{gold_answer}
+
+MODEL ANSWER:
+{model_answer}
+
+{passages_block}
+
+Rate the model answer on a scale of 0-5:
+- 0: Completely wrong, irrelevant, or empty
+- 1: Mostly wrong with minor correct elements
+- 2: Partially correct but major errors or omissions
+- 3: Roughly correct but with notable errors or missing details
+- 4: Mostly correct with only minor issues
+- 5: Fully correct and complete
+
+Respond with ONLY a JSON object:
+{"rubric": <0-5>, "rationale": "<brief explanation>", "self_confidence": <0.0-1.0>}
