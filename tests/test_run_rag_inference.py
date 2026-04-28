@@ -279,36 +279,36 @@ class TestRunRagCell:
                 noise_pool_paths=noise_pools,
             )
 
-        assert summary["status"] == "complete"
-        assert summary["processed"] == 5
+            assert summary["status"] == "complete"
+            assert summary["processed"] == 5
 
-        # Verify retriever was called for each record
-        assert mock_retriever.call_count == 5
+            # Verify retriever was called for each record
+            assert mock_retriever.call_count == 5
 
-        # Read output and verify RAG-specific fields
-        output_path = get_rag_output_path(
-            Path(tmpdir),
-            "MOCK",
-            "bm25",
-            0.0,
-            "da",
-        )
-        with open(output_path) as f:
-            records = [json.loads(line) for line in f]
+            # Read output and verify RAG-specific fields
+            output_path = get_rag_output_path(
+                Path(tmpdir),
+                "MOCK",
+                "bm25",
+                0.0,
+                "da",
+            )
+            with open(output_path) as f:
+                records = [json.loads(line) for line in f]
 
-        assert len(records) == 5
-        for rec in records:
-            assert "passages_used" in rec
-            assert "retriever" in rec
-            assert "noise_level" in rec
-            assert rec["retriever"] == "bm25"
-            assert rec["noise_level"] == 0.0
-            assert isinstance(rec["passages_used"], list)
-            assert len(rec["passages_used"]) > 0
-            # At noise=0.0 all passages should be real
-            for p in rec["passages_used"]:
-                assert p["noise_type"] == "real"
-                assert "chunk_id" in p
+            assert len(records) == 5
+            for rec in records:
+                assert "passages_used" in rec
+                assert "retriever" in rec
+                assert "noise_level" in rec
+                assert rec["retriever"] == "bm25"
+                assert rec["noise_level"] == 0.0
+                assert isinstance(rec["passages_used"], list)
+                assert len(rec["passages_used"]) > 0
+                # At noise=0.0 all passages should be real
+                for p in rec["passages_used"]:
+                    assert p["noise_type"] == "real"
+                    assert "chunk_id" in p
 
     def test_mock_rag_sc_produces_sc_result(
         self,
@@ -333,24 +333,24 @@ class TestRunRagCell:
                 noise_pool_paths=noise_pools,
             )
 
-        assert summary["status"] == "complete"
-        assert summary["processed"] == 3
+            assert summary["status"] == "complete"
+            assert summary["processed"] == 3
 
-        output_path = get_rag_output_path(
-            Path(tmpdir),
-            "MOCK",
-            "hybrid",
-            0.0,
-            "sc",
-        )
-        with open(output_path) as f:
-            records = [json.loads(line) for line in f]
+            output_path = get_rag_output_path(
+                Path(tmpdir),
+                "MOCK",
+                "hybrid",
+                0.0,
+                "sc",
+            )
+            with open(output_path) as f:
+                records = [json.loads(line) for line in f]
 
-        assert len(records) == 3
-        for rec in records:
-            assert rec["sc_result"] is not None
-            assert rec["sc_result"]["total_samples"] == 5
-            assert rec["retriever"] == "hybrid"
+            assert len(records) == 3
+            for rec in records:
+                assert rec["sc_result"] is not None
+                assert rec["sc_result"]["total_samples"] == 5
+                assert rec["retriever"] == "hybrid"
 
     def test_resume_skips_processed_records(
         self,
@@ -392,9 +392,9 @@ class TestRunRagCell:
                 noise_pool_paths=noise_pools,
             )
 
-        assert summary["status"] == "skipped"
-        assert summary["processed"] == 0
-        assert summary["skipped"] == 5
+            assert summary["status"] == "skipped"
+            assert summary["processed"] == 0
+            assert summary["skipped"] == 5
 
     def test_citations_extracted_in_rag_mode(
         self,
