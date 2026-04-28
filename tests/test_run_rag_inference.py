@@ -122,44 +122,6 @@ def rag_config() -> dict:
     return load_config(RAG_CONFIG_PATH)
 
 
-@pytest.fixture
-def noise_config() -> dict:
-    """Inline noise config matching configs/noise.yaml structure."""
-    return {
-        "seed": 42,
-        "top_k": 10,
-        "levels": {
-            "0.0": {"replaced": 0, "composition": {}},
-            "0.2": {
-                "replaced": 2,
-                "composition": {"irrelevant": 1, "contradictory_or_injection": 1},
-            },
-            "0.4": {
-                "replaced": 4,
-                "composition": {
-                    "irrelevant": 1,
-                    "contradictory": 1,
-                    "injection": 1,
-                    "any": 1,
-                },
-            },
-            "0.6": {
-                "replaced": 6,
-                "composition": {"irrelevant": 2, "contradictory": 2, "injection": 2},
-            },
-        },
-        "pools": {
-            "irrelevant": "corpus/noise/irrelevant_distractors.jsonl",
-            "injection": "corpus/noise/injection_passages.jsonl",
-            "contradictory": "corpus/noise/contradictory_passages.jsonl",
-        },
-        "contradictory": {
-            "min_acceptance_rate": 0.80,
-            "review_stats_path": "outputs/noise_review/contradictory_review_stats.json",
-        },
-    }
-
-
 # =========================================================================
 # TestRagConfig
 # =========================================================================
@@ -474,3 +436,36 @@ class TestRunRagCell:
             # Must have at least some noise passages
             non_real = sum(v for k, v in noise_types.items() if k != "real")
             assert non_real >= 1, f"Expected noise passages but got: {noise_types}"
+
+
+# =========================================================================
+# Error path tests
+# =========================================================================
+
+
+class TestRunRagCellErrors:
+    """Error-path tests for run_rag_cell."""
+
+    def test_invalid_strategy_raises(self, rag_config: dict) -> None:
+        with pytest.raises(ValueError, match="Invalid strategy"):
+            run_rag_cell(
+                model_name="MOCK",
+                strategy="bogus",
+                retriever_mode="bm25",
+                noise_level=0.0,
+                config=rag_config,
+                mock=True,
+                retriever=MockRetriever(),
+            )
+
+    def test_invalid_retriever_raises(self, rag_config: dict) -> None:
+        with pytest.raises(ValueError, match="Invalid retriever"):
+            run_rag_cell(
+                model_name="MOCK",
+                strategy="da",
+                retriever_mode="bogus",
+                noise_level=0.0,
+                config=rag_config,
+                mock=True,
+                retriever=MockRetriever(),
+            )

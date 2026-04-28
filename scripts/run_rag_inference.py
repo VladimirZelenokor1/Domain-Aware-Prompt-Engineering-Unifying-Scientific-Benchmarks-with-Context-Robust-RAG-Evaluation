@@ -613,6 +613,13 @@ def main() -> None:
     config = load_config(args.config)
     is_mock = args.model.upper() == "MOCK"
 
+    # Create retriever for production path
+    retriever = None
+    if not is_mock:
+        from retriever import Retriever
+
+        retriever = Retriever(device="cuda")
+
     summary = run_rag_cell(
         model_name=args.model,
         strategy=args.strategy,
@@ -622,6 +629,7 @@ def main() -> None:
         split=args.split,
         limit=args.limit,
         mock=is_mock,
+        retriever=retriever,
     )
 
     logger.info("Summary: %s", json.dumps(summary, indent=2))
