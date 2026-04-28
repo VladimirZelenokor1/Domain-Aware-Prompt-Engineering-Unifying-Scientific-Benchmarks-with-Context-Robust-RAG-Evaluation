@@ -432,7 +432,7 @@ class TestCitationMetrics:
         """Check precision and recall math with a mix of relevant/irrelevant."""
 
         class SelectiveNLI:
-            """NLI that marks 'real' text as entailing, others not."""
+            """NLI that marks passages containing 'supports' as entailing."""
 
             def predict(
                 self,
@@ -442,7 +442,7 @@ class TestCitationMetrics:
                 results = []
                 for pair in pairs:
                     passage_text = pair[0]
-                    if "relevant" in passage_text:
+                    if "supports" in passage_text:
                         results.append([0.05, 0.9, 0.05])
                     else:
                         results.append([0.7, 0.1, 0.2])
@@ -451,13 +451,13 @@ class TestCitationMetrics:
         nli = SelectiveNLI()
         claims = ["Some claim"]
         passages = [
-            {"chunk_id": "c1", "text": "relevant passage 1", "noise_type": "real"},
+            {"chunk_id": "c1", "text": "supports the claim 1", "noise_type": "real"},
             {
                 "chunk_id": "c2",
-                "text": "irrelevant noise",
+                "text": "random unrelated noise",
                 "noise_type": "corpus_random",
             },
-            {"chunk_id": "c3", "text": "relevant passage 2", "noise_type": "real"},
+            {"chunk_id": "c3", "text": "supports the claim 2", "noise_type": "real"},
         ]
         metrics = compute_citation_metrics(claims, passages, nli, threshold=0.5)
         # 2 of 3 passages are relevant -> precision = 2/3
