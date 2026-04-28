@@ -145,6 +145,30 @@ def _load_noise_config(config: dict) -> dict:
     return raw["noise"]
 
 
+class MockRetriever:
+    """Deterministic mock retriever for testing without indices."""
+
+    def _make_passages(self, query: str, top_k: int) -> list[dict]:
+        return [
+            {
+                "chunk_id": f"mock_chunk_{i:03d}",
+                "text": f"Mock passage {i} for: {query[:50]}",
+                "score": 1.0 - i * 0.05,
+                "rank": i + 1,
+            }
+            for i in range(top_k)
+        ]
+
+    def retrieve_bm25(self, query: str, top_k: int = 10) -> list[dict]:
+        return self._make_passages(query, top_k)
+
+    def retrieve_dense(self, query: str, top_k: int = 10) -> list[dict]:
+        return self._make_passages(query, top_k)
+
+    def retrieve_hybrid(self, query: str, top_k: int = 10) -> list[dict]:
+        return self._make_passages(query, top_k)
+
+
 def _retrieve_passages(
     retriever: Any,
     retriever_mode: str,
@@ -377,6 +401,10 @@ def run_rag_cell(
             len(dataset),
         )
         dataset = dataset[existing:]
+
+    # Create mock retriever if needed
+    if mock and retriever is None:
+        retriever = MockRetriever()
 
     # Resolve model config
     model_cfg = get_model_config(config, model_name) if not mock else {}
