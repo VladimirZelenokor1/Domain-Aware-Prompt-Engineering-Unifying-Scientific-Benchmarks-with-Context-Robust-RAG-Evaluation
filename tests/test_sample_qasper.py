@@ -238,7 +238,9 @@ def test_sample_deterministic_under_seed() -> None:
     a = sample_qasper(flat, target=10, seed=42)
     b = sample_qasper(flat, target=10, seed=42)
 
-    assert [r["question_id"] for r in a] == [r["question_id"] for r in b]
+    assert [r["details"]["question_id"] for r in a] == [
+        r["details"]["question_id"] for r in b
+    ]
 
 
 def test_sample_varies_with_seed() -> None:
@@ -249,7 +251,9 @@ def test_sample_varies_with_seed() -> None:
     a = sample_qasper(flat, target=10, seed=1)
     b = sample_qasper(flat, target=10, seed=2)
 
-    assert [r["question_id"] for r in a] != [r["question_id"] for r in b]
+    assert [r["details"]["question_id"] for r in a] != [
+        r["details"]["question_id"] for r in b
+    ]
 
 
 def test_sample_preserves_answer_type_diversity() -> None:
@@ -259,7 +263,7 @@ def test_sample_preserves_answer_type_diversity() -> None:
     source_types = {r["answer_type"] for r in flat}
 
     sample = sample_qasper(flat, target=15, seed=42)
-    sample_types = {r["answer_type"] for r in sample}
+    sample_types = {r["type"] for r in sample}
 
     # All non-empty strata should be represented
     assert sample_types == source_types
