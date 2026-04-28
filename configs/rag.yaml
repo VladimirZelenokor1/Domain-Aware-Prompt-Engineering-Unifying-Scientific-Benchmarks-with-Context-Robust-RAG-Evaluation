@@ -1,25 +1,13 @@
-# RAG experiment configuration (stub; filled in during Phase 5/6).
-#
-# Inherits model specs, prompting strategies, and inference parameters from
-# closed_book.yaml. This file only adds the RAG-specific axes (retriever,
-# noise level, noise composition) and the split selection for Track A and
-# Track B.
-#
-# Populated:  Phase 1 (this stub - 3 surviving models, placeholder axes).
-# To finish:  Phase 5 (fill noise_config path), Phase 6 (full factorial
-#             and fractional design matrices per thesis Section 3.12).
-
 experiment: rag
 
 data:
   track_a:
     dev: data/sciknoweval/dev.json
-    main_test_retrievable: data/sciknoweval/main_test_retrievable.json  # built in Phase 3
+    main_test: data/sciknoweval/main_test_sampled.json
   track_b:
-    sample: data/qasper/sample.json   # built in Phase 9
+    sample: data/qasper/sample.json
 
 models:
-  # Mirrors configs/closed_book.yaml after the Phase 1 cleanup. Keep in sync.
   llama-3.2-3b:
     path: models/llama-3.2-3b-awq
     quantization: awq
@@ -31,14 +19,35 @@ models:
     path: models/qwen2.5-7b-awq
     quantization: awq
     gpu_memory_utilization: 0.85
-    max_model_len: 2048
+    max_model_len: 4096
     enforce_eager: true
     dtype: float16
   sciphi-mistral-7b:
     path: models/sciphi-mistral-7b-awq
     quantization: awq
     gpu_memory_utilization: 0.85
-    max_model_len: 2048
+    max_model_len: 4096
+    enforce_eager: true
+    dtype: float16
+  deepseek-r1-qwen-7b:
+    path: models/deepseek-r1-qwen-7b-awq
+    quantization: awq
+    gpu_memory_utilization: 0.85
+    max_model_len: 4096
+    enforce_eager: true
+    dtype: float16
+  gemma-2-9b:
+    path: models/gemma-2-9b-awq
+    quantization: awq_marlin
+    gpu_memory_utilization: 0.85
+    max_model_len: 4096
+    enforce_eager: true
+    dtype: float16
+  mistral-nemo-12b:
+    path: models/mistral-nemo-12b-awq
+    quantization: awq
+    gpu_memory_utilization: 0.85
+    max_model_len: 4096
     enforce_eager: true
     dtype: float16
 
@@ -51,10 +60,10 @@ strategies:
 retrievers:
   - bm25
   - dense
-  - hybrid    # canonical retriever for the main RAG matrix
+  - hybrid
 
 noise:
-  config: configs/noise.yaml     # created in Phase 5
+  config: configs/noise.yaml
   levels: [0.0, 0.2, 0.4, 0.6]
 
 inference:

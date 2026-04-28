@@ -55,7 +55,7 @@ class TestConfig:
         assert "data" in config
         assert config["inference"]["seed"] == 42
         assert config["inference"]["max_tokens"] == 1024
-        assert len(config["models"]) == 4
+        assert len(config["models"]) == 6
 
     def test_load_config_missing_file_raises(self, tmp_path: Path) -> None:
         with pytest.raises(FileNotFoundError):

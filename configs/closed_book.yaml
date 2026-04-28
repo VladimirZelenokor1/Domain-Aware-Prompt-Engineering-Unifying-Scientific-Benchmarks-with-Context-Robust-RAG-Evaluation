@@ -2,7 +2,7 @@ experiment: closed_book
 
 data:
   dev: data/sciknoweval/dev.json
-  main_test: data/sciknoweval/main_test.json
+  main_test: data/sciknoweval/main_test_sampled.json
 
 models:
   llama-3.2-3b:
@@ -16,25 +16,37 @@ models:
     path: models/qwen2.5-7b-awq
     quantization: awq
     gpu_memory_utilization: 0.85
-    max_model_len: 2048
+    max_model_len: 4096
     enforce_eager: true
     dtype: float16
   sciphi-mistral-7b:
     path: models/sciphi-mistral-7b-awq
     quantization: awq
     gpu_memory_utilization: 0.85
-    max_model_len: 2048
+    max_model_len: 4096
     enforce_eager: true
     dtype: float16
-  # deepseek-r1-qwen-7b excluded on hardware-fairness grounds (see commit 904c5b9):
-  # could not receive the max_tokens uplift applied to other 7B models on RTX 4060 8GB.
-  # deepseek-r1-qwen-7b:
-  #   path: models/deepseek-r1-qwen-7b-awq
-  #   quantization: awq
-  #   gpu_memory_utilization: 0.85
-  #   max_model_len: 1792
-  #   enforce_eager: true
-  #   dtype: float16
+  deepseek-r1-qwen-7b:
+    path: models/deepseek-r1-qwen-7b-awq
+    quantization: awq
+    gpu_memory_utilization: 0.85
+    max_model_len: 4096
+    enforce_eager: true
+    dtype: float16
+  gemma-2-9b:
+    path: models/gemma-2-9b-awq
+    quantization: awq_marlin
+    gpu_memory_utilization: 0.85
+    max_model_len: 4096
+    enforce_eager: true
+    dtype: float16
+  mistral-nemo-12b:
+    path: models/mistral-nemo-12b-awq
+    quantization: awq
+    gpu_memory_utilization: 0.85
+    max_model_len: 4096
+    enforce_eager: true
+    dtype: float16
 
 strategies:
   - da
