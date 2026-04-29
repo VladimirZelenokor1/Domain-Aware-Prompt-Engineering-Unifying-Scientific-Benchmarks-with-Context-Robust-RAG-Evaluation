@@ -47,6 +47,7 @@ models:
     max_model_len: 4096
     enforce_eager: true
     dtype: float16
+    prompt_format: mistral_instruct
 
 strategies:
   - da

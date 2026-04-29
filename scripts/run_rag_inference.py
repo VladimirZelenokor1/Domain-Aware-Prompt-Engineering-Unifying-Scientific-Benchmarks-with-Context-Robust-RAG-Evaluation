@@ -55,6 +55,7 @@ from run_inference import (  # noqa: E402
     count_existing_records,
     create_engine,
     create_sampling_params,
+    format_prompts_for_inference,
     get_choices_or_none,
     get_model_config,
     load_config,
@@ -479,6 +480,9 @@ def run_rag_cell(
                 passages=[p["text"] for p in assembled],
             )
             prompts.append(prompt)
+
+        if model_cfg:
+            prompts = format_prompts_for_inference(prompts, model_cfg)
 
         # Truncate prompts that exceed context window
         if not mock and hasattr(engine, "get_tokenizer"):

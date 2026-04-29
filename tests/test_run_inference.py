@@ -22,6 +22,7 @@ from run_inference import (  # noqa: E402
     build_prompts_batch,
     count_existing_records,
     create_sampling_params,
+    format_prompts_for_inference,
     get_choices_or_none,
     get_gold_answer,
     get_model_config,
@@ -65,6 +66,23 @@ class TestConfig:
         config = load_config(CONFIG_PATH)
         with pytest.raises(KeyError, match="not-a-model"):
             get_model_config(config, "not-a-model")
+
+
+class TestFormatPromptsForInference:
+    def test_no_format_unchanged(self) -> None:
+        ps = ["hello", "world"]
+        assert format_prompts_for_inference(ps, {}) == ps
+        assert format_prompts_for_inference(ps, {"path": "x"}) == ps
+
+    def test_mistral_instruct_wraps(self) -> None:
+        ps = ["  Q1  ", "Q2"]
+        out = format_prompts_for_inference(ps, {"prompt_format": "mistral_instruct"})
+        assert out[0] == "<s>[INST]\nQ1\n[/INST]\n"
+        assert out[1] == "<s>[INST]\nQ2\n[/INST]\n"
+
+    def test_unknown_format_raises(self) -> None:
+        with pytest.raises(ValueError, match="Unknown prompt_format"):
+            format_prompts_for_inference(["a"], {"prompt_format": "bogus"})
 
 
 # =========================================================================

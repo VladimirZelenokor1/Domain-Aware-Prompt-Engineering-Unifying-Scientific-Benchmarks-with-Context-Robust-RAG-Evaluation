@@ -47,6 +47,8 @@ models:
     max_model_len: 4096
     enforce_eager: true
     dtype: float16
+    # vLLM+AWQ: raw prompts often yield empty generations; wrap user block.
+    prompt_format: mistral_instruct
 
 strategies:
   - da
