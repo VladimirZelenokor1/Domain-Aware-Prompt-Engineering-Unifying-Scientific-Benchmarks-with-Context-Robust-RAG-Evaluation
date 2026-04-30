@@ -468,6 +468,39 @@ def test_contradictory_review_stats_computes_acceptance_rate(tmp_path: Path) -> 
     assert on_disk["acceptance_rate"] == pytest.approx(0.8)
 
 
+def test_iter_mcq_candidates_skips_meta_answers() -> None:
+    """Gold like 'All of the above' produces no usable contradiction;
+    such records must be skipped at the candidate-iteration stage."""
+    import tempfile
+
+    records = [
+        {
+            "question": "Q meta",
+            "type": "mcq-4-choices",
+            "domain": "Chemistry",
+            "answerKey": "D",
+            "answer": "",
+            "details": {"id": "meta-1"},
+            "choices": {
+                "text": ["fact-A", "fact-B", "fact-C", "All of the above"],
+                "label": ["A", "B", "C", "D"],
+            },
+        },
+        # Control: a normal MCQ that should survive.
+        _mcq4(qid=1, key="A"),
+    ]
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+        json.dump(records, f)
+        path = Path(f.name)
+    try:
+        cands = list(iter_mcq_candidates(path))
+        qids = {c["source_qid"] for c in cands}
+        assert "meta-1" not in qids
+        assert "src-00001" in qids
+    finally:
+        path.unlink()
+
+
 def test_build_contradictory_handles_braces_in_question(
     tmp_path: Path,
     prompt_template_path: Path,

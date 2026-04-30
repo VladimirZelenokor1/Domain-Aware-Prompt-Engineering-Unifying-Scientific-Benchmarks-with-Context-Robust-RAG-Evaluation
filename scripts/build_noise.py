@@ -31,6 +31,7 @@ import hashlib
 import json
 import logging
 import random
+import re
 import sys
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -374,6 +375,23 @@ def build_injection(
 # ``run_inference.create_engine`` and forwards a real ``SamplingParams``.
 
 
+_META_ANSWER_RE = re.compile(
+    r"^\s*(all\s+of\s+the\s+above|none\s+of\s+the\s+above|both\s+of\s+(the\s+)?above|both\s+[A-D]\b)",
+    re.IGNORECASE,
+)
+
+
+def _is_meta_answer(text: str) -> bool:
+    """True if the answer is a meta-formulation like 'All of the above'.
+
+    These break the contradictory-noise contract: the distractors are
+    actually true partial answers, so picking one as ``fake_answer``
+    produces a passage that affirms the gold answer rather than
+    contradicting it. Skip such records during candidate iteration.
+    """
+    return bool(_META_ANSWER_RE.match(text or ""))
+
+
 def _content_hash_qid(question: str, answer_key: str, choice_texts: list[str]) -> str:
     """Stable identifier for an MCQ record based on its content.
 
@@ -456,8 +474,15 @@ def iter_mcq_candidates(main_test_path: Path) -> Iterator[dict]:
         original = (texts[gold_idx] or "").strip()
         if not original:
             continue
+        if _is_meta_answer(original):
+            # Gold like 'All of the above' makes distractors partially-
+            # true facts; using them as fake_answer would AFFIRM the
+            # gold class, not contradict it. Skip silently.
+            continue
         distractors = [
-            (t or "").strip() for i, t in enumerate(texts) if i != gold_idx and t
+            (t or "").strip()
+            for i, t in enumerate(texts)
+            if i != gold_idx and t and not _is_meta_answer(t)
         ]
         if not distractors:
             continue
