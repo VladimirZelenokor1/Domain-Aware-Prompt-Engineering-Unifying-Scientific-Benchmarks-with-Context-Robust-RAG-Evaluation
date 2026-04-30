@@ -272,30 +272,94 @@ ls outputs/closed_book_main/*/summary.json
 
 **Цель**: сгенерировать 3000 контрадикторных passages через Qwen2.5-7B (LLM-based perturbation), затем ручная проверка 50 примеров с порогом acceptance ≥ 0.80.
 
+**Источник**: только MCQ-вопросы (`mcq-4-choices` / `mcq-2-choices`) с валидным `answerKey` из `main_test.json` (16,659 кандидатов; запас 5.5x к target=3000). `fake_answer` берётся из distractor-опций, `original_answer` сохраняется в provenance, `source_qid` - SHA1-хеш контента (стабилен между сплитами). LLM-промпт - `prompts/noise/contradictory_generator.txt` (v1).
+
+**Anti-leakage**: `--exclude-split data/sciknoweval/main_test_sampled.json` исключает qid'ы eval-выборки из noise-кандидатов. Передавать ОБЯЗАТЕЛЬНО, иначе noise-passage может быть построен из вопроса, который оценивается в Phase F.
+
+### Рекомендуемая стратегия: smoke → pilot → full
+
+Полный прогон 3-4 часа. Если acceptance < 0.80 - по `noise.contradictory.lockdown_policy` единственный валидный путь: refine prompt и regenerate ВСЁ. Чтобы не словить 4-часовую переделку, делаем pilot-50 заранее.
+
+#### Step 1: smoke (5 записей, ~2 мин)
+
+```bash
+git pull origin dev
+
+# Eyeball-проверка: schema, длина, наличие fake_answer в text
+python scripts/build_noise.py contradictory \
+  --model qwen2.5-7b --target 5 --seed 42 \
+  --output /tmp/contradictory_smoke.jsonl
+
+head -1 /tmp/contradictory_smoke.jsonl | python -m json.tool
+wc -l /tmp/contradictory_smoke.jsonl
+```
+
+Хорошие признаки: 5 строк, `text` 60-220 слов, `fake_answer` встречается в `text`, тон уверенный без hedging ("however the actual answer is..."), нет refusal'ов.
+
+Если что-то не так - править `prompts/noise/contradictory_generator.txt` локально, push, не идти на pilot.
+
+#### Step 2: pilot (50 записей + manual review, ~25 мин GPU + 30 мин разметка)
+
+```bash
+python scripts/build_noise.py contradictory \
+  --model qwen2.5-7b --target 50 --seed 42 \
+  --output corpus/noise/contradictory_pilot.jsonl
+
+python scripts/build_noise.py contradictory-review \
+  --pool corpus/noise/contradictory_pilot.jsonl --sample 50 \
+  --csv outputs/noise_review/pilot_review.csv
+
+# В JupyterLab открыть pilot_review.csv, проставить accept/reject в колонке verdict
+# Критерии accept: passage уверенно утверждает fake_answer как факт, нет hedging,
+# нет refusal, текст научно-правдоподобный, тематически связан с question.
+
+python scripts/build_noise.py contradictory-stats \
+  --csv outputs/noise_review/pilot_review.csv \
+  --stats outputs/noise_review/pilot_stats.json
+cat outputs/noise_review/pilot_stats.json
+```
+
+- Если `acceptance_rate >= 0.80` → переходим к Step 3.
+- Если `< 0.80` → refine `prompts/noise/contradictory_generator.txt` локально, push, повторить pilot. Порог НЕ понижать.
+
+#### Step 3: full (3000 записей, 3-4 ч GPU)
+
 ```bash
 nohup python scripts/build_noise.py contradictory \
   --model qwen2.5-7b \
   --target 3000 \
+  --exclude-split data/sciknoweval/main_test_sampled.json \
   > outputs/logs/noise_contradictory.log 2>&1 &
 disown
+echo "PID: $!"
 
-# Через 3-4 ч проверь
-ls corpus/noise/contradictory_passages.jsonl
-wc -l corpus/noise/contradictory_passages.jsonl
+# Через 3-4 ч
+ls -la corpus/noise/contradictory_passages.jsonl
+wc -l corpus/noise/contradictory_passages.jsonl   # ожидаемо 3000
 
-# Ручная проверка 50 примеров
+# Финальный review-50 (gate для rag_gate.py)
 python scripts/build_noise.py contradictory-review --sample 50
-# Откроется CSV для разметки в outputs/noise_review/contradictory_review.csv
-# Проставить вручную "accept" / "reject" в колонке verdict (через JupyterLab)
+# Откроется CSV в outputs/noise_review/contradictory_review.csv (путь из noise.yaml)
+# Проставить accept/reject в колонке verdict через JupyterLab.
 
-# Аггрегация
 python scripts/build_noise.py contradictory-stats
 cat outputs/noise_review/contradictory_review_stats.json
-# Если acceptance_rate >= 0.80 -> Phase F unlocked
-# Если < 0.80 -> refine prompt в build_noise.py, regenerate
+# Если acceptance_rate >= 0.80 -> Phase F unlocked (rag_gate.py пропустит)
+# Если < 0.80 -> refine prompt, regenerate full pool, re-review
 ```
 
-**Ориентировочно 3-4 часа GPU + 1 ч ручной работы = ~150-200 баллов.**
+**Доступные CLI-опции `contradictory`** (полный список):
+- `--model qwen2.5-7b` (обязательный, ключ из `configs/closed_book.yaml`)
+- `--target 3000` (желаемый размер пула; resume догоняет до этого числа)
+- `--exclude-split <path>` (опц., предотвращает leakage qid'ов в eval)
+- `--main-test <path>` (default: `data/sciknoweval/main_test.json`)
+- `--seed 42`, `--batch-size 16`, `--config configs/closed_book.yaml`
+- `--prompt-template prompts/noise/contradictory_generator.txt`
+- `--append` (resume; продолжает нумерацию `noise_id`, пропускает виденные qid)
+- `--dry-run` (без LLM: показать число MCQ-кандидатов и эффект `--exclude-split`)
+- `--output corpus/noise/contradictory_passages.jsonl`
+
+**Ориентировочно**: smoke ~2 мин + pilot ~55 мин + full ~3-4 ч + final review ~30 мин ≈ **5 ч полная Phase E** = ~200-220 баллов.
 
 ---
 

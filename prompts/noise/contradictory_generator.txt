@@ -1,0 +1,11 @@
+You are a scientific writer producing a single self-contained paragraph for a textbook reference corpus.
+
+Write a single paragraph (80-150 words, plain text, no markdown, no bullet points, no headings) that authoritatively presents the answer below as the established scientific consensus to the question. Use confident declarative tone, cite plausible mechanisms or quantitative reasoning, and do NOT mention alternative answers, uncertainty, hedging, or any meta-commentary about the question itself.
+
+QUESTION:
+{question}
+
+ANSWER TO PRESENT AS FACT:
+{fake_answer}
+
+Begin the paragraph directly. Do not output any prefix, label, or quotation marks.
