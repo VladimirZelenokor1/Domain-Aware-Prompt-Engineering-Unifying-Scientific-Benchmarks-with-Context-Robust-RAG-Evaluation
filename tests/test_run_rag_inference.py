@@ -23,6 +23,7 @@ from run_inference import (  # noqa: E402
 
 from run_rag_inference import (  # noqa: E402
     get_rag_output_path,
+    make_retriever,
     resolve_split_path,
     run_rag_cell,
 )
@@ -30,6 +31,40 @@ from run_rag_inference import (  # noqa: E402
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RAG_CONFIG_PATH = PROJECT_ROOT / "configs" / "rag.yaml"
 DEV_DATA = PROJECT_ROOT / "data" / "sciknoweval" / "dev.json"
+
+
+# =========================================================================
+# make_retriever: split -> index set
+# =========================================================================
+
+
+class TestMakeRetriever:
+    """Retriever must point at QASPER indices for track_b, main otherwise."""
+
+    @pytest.fixture(autouse=True)
+    def _require_faiss(self) -> None:
+        # retriever module imports faiss at module load; only present on the
+        # GPU server. Skip locally where faiss is not installed.
+        pytest.importorskip("faiss")
+
+    @staticmethod
+    def _norm(p: str) -> str:
+        return p.replace("\\", "/")
+
+    def test_track_b_uses_qasper_indices(self) -> None:
+        r = make_retriever("track_b", device="cpu")
+        assert self._norm(r._bm25_index_dir).endswith("indices/qasper_bm25")
+        assert self._norm(r._faiss_index_path).endswith(
+            "indices/qasper_faiss/index.faiss"
+        )
+        assert self._norm(r._faiss_id_map_path).endswith(
+            "indices/qasper_faiss/id_map.json"
+        )
+
+    def test_main_test_uses_default_indices(self) -> None:
+        r = make_retriever("main_test", device="cpu")
+        assert self._norm(r._bm25_index_dir).endswith("indices/bm25")
+        assert "qasper" not in self._norm(r._faiss_index_path)
 
 
 # =========================================================================

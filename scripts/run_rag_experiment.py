@@ -366,12 +366,12 @@ def run_rag_experiment(
             model_cfg = get_model_config(config, model_name)
             engine = _create_engine(model_cfg, seed=config["inference"]["seed"])
 
-        # Create retriever once per model
+        # Create retriever once per model (QASPER indices for track_b)
         retriever: Any = None
         if not mock:
-            from retriever import Retriever  # noqa: PLC0415
+            from run_rag_inference import make_retriever  # noqa: PLC0415
 
-            retriever = Retriever(device="cuda")
+            retriever = make_retriever(split)
 
         for cell in cells:
             _, strategy, retriever_mode, noise_level = cell

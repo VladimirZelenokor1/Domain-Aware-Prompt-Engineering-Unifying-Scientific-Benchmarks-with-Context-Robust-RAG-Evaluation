@@ -107,6 +107,33 @@ def resolve_split_path(config: dict, split: str) -> Path:
         raise ValueError(f"Unknown split: {split}")
 
 
+def make_retriever(split: str, device: str = "cuda"):
+    """Create a Retriever pointed at the index set for the given split.
+
+    track_b (QASPER, Track B) retrieves over the QASPER-specific indices;
+    all other splits use the main SciKnowEval corpus indices (Retriever
+    defaults). Without this, QASPER questions would be answered with
+    SciKnowEval passages.
+
+    Args:
+        split: Dataset split ('dev', 'main_test', 'track_b').
+        device: Torch device for embedding/reranker models.
+
+    Returns:
+        Configured Retriever instance (resources lazy-loaded on first use).
+    """
+    from retriever import Retriever  # noqa: PLC0415
+
+    if split == "track_b":
+        return Retriever(
+            bm25_index_dir=PROJECT_ROOT / "indices" / "qasper_bm25",
+            faiss_index_path=PROJECT_ROOT / "indices" / "qasper_faiss" / "index.faiss",
+            faiss_id_map_path=PROJECT_ROOT / "indices" / "qasper_faiss" / "id_map.json",
+            device=device,
+        )
+    return Retriever(device=device)
+
+
 def get_rag_output_path(
     base_dir: Path,
     model: str,
@@ -645,12 +672,10 @@ def main() -> None:
     config = load_config(args.config)
     is_mock = args.model.upper() == "MOCK"
 
-    # Create retriever for production path
+    # Create retriever for production path (QASPER indices for track_b)
     retriever = None
     if not is_mock:
-        from retriever import Retriever
-
-        retriever = Retriever(device="cuda")
+        retriever = make_retriever(args.split)
 
     summary = run_rag_cell(
         model_name=args.model,
