@@ -94,11 +94,15 @@ def flatten_questions(
             qas = paper["qas"]
             questions = qas["question"]
             question_ids = qas["question_id"]
-            answers_list = qas["answers"]["answer"]
+            # QASPER schema: qas["answers"] is a list aligned with questions;
+            # each element is {"answer": [annotation, ...], ...} where
+            # "answer" is a list of flat annotation dicts (one per annotator).
+            answers_per_question = qas["answers"]
 
-            for q_text, q_id, answer_annotations in zip(
-                questions, question_ids, answers_list
+            for q_text, q_id, ans_obj in zip(
+                questions, question_ids, answers_per_question
             ):
+                answer_annotations = ans_obj.get("answer", [])
                 # Use first annotator's answer
                 if not answer_annotations:
                     continue

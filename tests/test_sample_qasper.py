@@ -64,7 +64,17 @@ def _make_mock_paper(
 
     q_texts = [q[0] for q in questions]
     q_ids = [f"qid_{paper_id}_{i}" for i in range(len(questions))]
-    answers_list = [[q[1]] for q in questions]
+    # Real QASPER schema: qas["answers"] is a list aligned with questions;
+    # each element is {"answer": [annotation, ...], "annotation_id": [...],
+    # "worker_id": [...]} where "answer" is a list of flat annotation dicts.
+    answers_per_question = [
+        {
+            "answer": [q[1]],
+            "annotation_id": [f"ann_{i}"],
+            "worker_id": [f"worker_{i}"],
+        }
+        for i, q in enumerate(questions)
+    ]
 
     return {
         "id": paper_id,
@@ -77,9 +87,7 @@ def _make_mock_paper(
         "qas": {
             "question": q_texts,
             "question_id": q_ids,
-            "answers": {
-                "answer": answers_list,
-            },
+            "answers": answers_per_question,
         },
     }
 
