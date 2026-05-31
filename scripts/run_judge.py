@@ -159,6 +159,7 @@ def _build_guided_sampling(
     temperature: float,
     seed: int,
     max_tokens: int,
+    backend: str = "lm-format-enforcer",
 ) -> Any:
     """Build a vLLM SamplingParams that forces output to match a JSON schema.
 
@@ -170,6 +171,9 @@ def _build_guided_sampling(
         temperature: Sampling temperature (0.0 for deterministic judging).
         seed: RNG seed.
         max_tokens: Max output tokens.
+        backend: Guided-decoding backend ('lm-format-enforcer' or 'outlines').
+            Defaults to lm-format-enforcer (outlines pulls heavy/broken deps
+            in some environments).
 
     Returns:
         Configured vLLM SamplingParams instance.
@@ -184,7 +188,7 @@ def _build_guided_sampling(
             seed=seed,
             max_tokens=max_tokens,
             n=1,
-            guided_decoding=GuidedDecodingParams(json=schema),
+            guided_decoding=GuidedDecodingParams(json=schema, backend=backend),
         )
     except ImportError:
         return SamplingParams(
@@ -193,6 +197,7 @@ def _build_guided_sampling(
             max_tokens=max_tokens,
             n=1,
             guided_json=schema,
+            guided_decoding_backend=backend,
         )
 
 
@@ -207,15 +212,16 @@ def build_judge_sampling_set(scoring_cfg: dict) -> dict[str, Any]:
     """
     temperature = scoring_cfg.get("judge_temperature", 0.0)
     seed = scoring_cfg.get("judge_seed", 42)
+    backend = scoring_cfg.get("guided_backend", "lm-format-enforcer")
     return {
         "rubric": _build_guided_sampling(
-            RUBRIC_JSON_SCHEMA, temperature, seed, _RUBRIC_MAX_TOKENS
+            RUBRIC_JSON_SCHEMA, temperature, seed, _RUBRIC_MAX_TOKENS, backend
         ),
         "claims": _build_guided_sampling(
-            CLAIMS_JSON_SCHEMA, temperature, seed, _CLAIMS_MAX_TOKENS
+            CLAIMS_JSON_SCHEMA, temperature, seed, _CLAIMS_MAX_TOKENS, backend
         ),
         "coverage": _build_guided_sampling(
-            COVERAGE_JSON_SCHEMA, temperature, seed, _COVERAGE_MAX_TOKENS
+            COVERAGE_JSON_SCHEMA, temperature, seed, _COVERAGE_MAX_TOKENS, backend
         ),
     }
 
