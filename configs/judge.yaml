@@ -27,7 +27,7 @@ main_set_judges:
 
 calibration_judge:
   id: judge_c
-  model: gpt-4o                           # or claude-sonnet-4; finalise at Phase 7.4
+  model: claude-sonnet-4-6                # Anthropic API; independent of examinee families
   role: proprietary_calibration
   scope: dev_set + holdout_audit
   max_items: 1000
