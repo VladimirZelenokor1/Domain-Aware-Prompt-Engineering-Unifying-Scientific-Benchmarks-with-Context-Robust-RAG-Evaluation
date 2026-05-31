@@ -251,9 +251,11 @@ def build_rubric_prompt(template: str, record: dict) -> str:
     Returns:
         Formatted prompt string.
     """
-    model_answer = record.get("parsed", {}).get(
-        "answer", record.get("raw_response", "")
-    )
+    # Coalesce None -> "" : dict.get(key, default) returns None when the key
+    # exists with a null value (e.g. parsed.answer is null on empty outputs),
+    # and str.replace() rejects a None argument.
+    parsed = record.get("parsed") or {}
+    model_answer = parsed.get("answer") or record.get("raw_response") or ""
     passages = record.get("passages_used", [])
 
     if passages:
@@ -266,8 +268,8 @@ def build_rubric_prompt(template: str, record: dict) -> str:
 
     # Use str.replace() instead of str.format() because templates
     # contain JSON examples with literal curly braces.
-    result = template.replace("{question}", record.get("question", ""))
-    result = result.replace("{gold_answer}", record.get("gold_answer", ""))
+    result = template.replace("{question}", record.get("question") or "")
+    result = result.replace("{gold_answer}", record.get("gold_answer") or "")
     result = result.replace("{model_answer}", model_answer)
     result = result.replace("{passages_block}", passages_block)
     return result
@@ -325,7 +327,7 @@ def build_claims_prompt(template: str, answer: str) -> str:
     Returns:
         Formatted prompt string.
     """
-    return template.replace("{answer}", answer)
+    return template.replace("{answer}", answer or "")
 
 
 def parse_claims_response(raw: str) -> list[str]:
@@ -487,8 +489,8 @@ def build_coverage_prompt(
     Returns:
         Formatted prompt string.
     """
-    result = template.replace("{gold_answer}", gold_answer)
-    result = result.replace("{model_answer}", model_answer)
+    result = template.replace("{gold_answer}", gold_answer or "")
+    result = result.replace("{model_answer}", model_answer or "")
     return result
 
 
@@ -640,7 +642,8 @@ def score_records(
     """
 
     def _model_answer(rec: dict) -> str:
-        return rec.get("parsed", {}).get("answer", rec.get("raw_response", ""))
+        parsed = rec.get("parsed") or {}
+        return parsed.get("answer") or rec.get("raw_response") or ""
 
     # --- Pass 1: rubric (all records) ---
     rubric_prompts = [build_rubric_prompt(templates["rubric"], r) for r in records]

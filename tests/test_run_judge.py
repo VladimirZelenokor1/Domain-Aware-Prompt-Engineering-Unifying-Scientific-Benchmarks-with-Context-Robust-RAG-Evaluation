@@ -566,6 +566,36 @@ class TestScoreRecordsBatched:
         assert results[0]["faithfulness"] is not None
         assert results[1]["faithfulness"] is None
 
+    def test_handles_null_answer_and_gold(
+        self,
+        judge_llm: MockJudgeLLM,
+        templates: dict[str, str],
+        sampling_params: MockSamplingParams,
+    ) -> None:
+        # Empty-output records have parsed.answer=None; gold/question may be
+        # null too. Must not crash str.replace().
+        rec = {
+            "question_id": "x",
+            "question": None,
+            "gold_answer": None,
+            "raw_response": None,
+            "parsed": {"answer": None},
+        }
+        sampling_set = {
+            "rubric": sampling_params,
+            "claims": sampling_params,
+            "coverage": sampling_params,
+        }
+        results = score_records(
+            records=[rec],
+            judge_llm=judge_llm,
+            nli_model=None,
+            templates=templates,
+            sampling_set=sampling_set,
+        )
+        assert len(results) == 1
+        assert 0 <= results[0]["rubric"] <= 5
+
 
 class TestScoreRecord:
     """Tests for the full score_record pipeline."""
