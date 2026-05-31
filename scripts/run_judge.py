@@ -123,11 +123,14 @@ def _extract_json(raw: str) -> str:
 # Guided-decoding JSON schemas (force valid JSON from the judge LLM)
 # =========================================================================
 
+# Length bounds keep guided JSON short so it always closes within the token
+# budget (a truncated-but-valid prefix still fails json.loads) and so the
+# CPU-bound guided-decoding step stays fast.
 RUBRIC_JSON_SCHEMA = {
     "type": "object",
     "properties": {
         "rubric": {"type": "integer", "minimum": 0, "maximum": 5},
-        "rationale": {"type": "string"},
+        "rationale": {"type": "string", "maxLength": 240},
         "self_confidence": {"type": "number", "minimum": 0, "maximum": 1},
     },
     "required": ["rubric", "rationale", "self_confidence"],
@@ -135,7 +138,8 @@ RUBRIC_JSON_SCHEMA = {
 
 CLAIMS_JSON_SCHEMA = {
     "type": "array",
-    "items": {"type": "string"},
+    "items": {"type": "string", "maxLength": 200},
+    "maxItems": 10,
 }
 
 COVERAGE_JSON_SCHEMA = {
@@ -143,16 +147,19 @@ COVERAGE_JSON_SCHEMA = {
     "properties": {
         "key_points_total": {"type": "integer", "minimum": 0},
         "key_points_covered": {"type": "integer", "minimum": 0},
-        "missing_points": {"type": "array", "items": {"type": "string"}},
+        "missing_points": {
+            "type": "array",
+            "items": {"type": "string", "maxLength": 120},
+            "maxItems": 6,
+        },
     },
     "required": ["key_points_total", "key_points_covered"],
 }
 
-# Per-task output token caps. Must be high enough that the guided JSON
-# closes (a truncated-but-valid-prefix still fails json.loads).
-_RUBRIC_MAX_TOKENS = 512
-_CLAIMS_MAX_TOKENS = 768
-_COVERAGE_MAX_TOKENS = 384
+# Per-task output token caps (bounded by the schema lengths above).
+_RUBRIC_MAX_TOKENS = 256
+_CLAIMS_MAX_TOKENS = 512
+_COVERAGE_MAX_TOKENS = 256
 
 
 def _build_guided_sampling(
