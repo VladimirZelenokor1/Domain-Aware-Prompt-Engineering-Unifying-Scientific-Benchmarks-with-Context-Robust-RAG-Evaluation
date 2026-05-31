@@ -148,9 +148,10 @@ COVERAGE_JSON_SCHEMA = {
     "required": ["key_points_total", "key_points_covered"],
 }
 
-# Per-task output token caps (guided JSON is short; smaller = faster).
-_RUBRIC_MAX_TOKENS = 384
-_CLAIMS_MAX_TOKENS = 512
+# Per-task output token caps. Must be high enough that the guided JSON
+# closes (a truncated-but-valid-prefix still fails json.loads).
+_RUBRIC_MAX_TOKENS = 512
+_CLAIMS_MAX_TOKENS = 768
 _COVERAGE_MAX_TOKENS = 384
 
 
