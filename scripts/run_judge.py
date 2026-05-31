@@ -20,6 +20,7 @@ import json
 import logging
 import re
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -848,22 +849,166 @@ def _get_judge_model_config(config: dict, judge_id: str) -> dict:
     )
 
 
+# Rough USD pricing per 1M tokens (input, output) for the cost cap. Only
+# used to estimate spend against the hard cap; not billing-accurate.
+_API_PRICING_PER_M: dict[str, tuple[float, float]] = {
+    "gpt-4o": (2.5, 10.0),
+    "gpt-4o-mini": (0.15, 0.6),
+    "gpt-4.1": (2.0, 8.0),
+    "claude-sonnet-4": (3.0, 15.0),
+    "claude-sonnet-4-6": (3.0, 15.0),
+    "claude-3-5-sonnet": (3.0, 15.0),
+    "claude-3-5-sonnet-latest": (3.0, 15.0),
+}
+_API_PRICING_DEFAULT = (3.0, 15.0)
+
+
+class _APICompletion:
+    """Mimics one vllm.outputs.CompletionOutput (only ``.text`` is used)."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+class _APIRequestOutput:
+    """Mimics a vllm.outputs.RequestOutput (only ``.outputs[0].text`` used)."""
+
+    def __init__(self, text: str) -> None:
+        self.outputs = [_APICompletion(text)]
+
+
+class APIJudge:
+    """Proprietary-API judge with a vLLM-compatible ``generate`` interface.
+
+    Returns objects shaped like vLLM ``RequestOutput`` so it drops into
+    ``score_records`` unchanged. Enforces a hard USD cost cap and retries
+    transient API errors with exponential backoff.
+
+    Args:
+        model: API model id (e.g. 'gpt-4o' or 'claude-sonnet-4').
+        cost_cap_usd: Hard spend ceiling; ``generate`` raises once exceeded.
+        max_retries: Retry attempts per call on transient errors.
+        backoff_base_s: Base seconds for exponential backoff.
+        max_tokens: Max output tokens per call.
+        temperature: Sampling temperature.
+    """
+
+    def __init__(
+        self,
+        model: str,
+        *,
+        cost_cap_usd: float = 100.0,
+        max_retries: int = 5,
+        backoff_base_s: float = 2.0,
+        max_tokens: int = 512,
+        temperature: float = 0.0,
+    ) -> None:
+        self.model = model
+        self.cost_cap_usd = cost_cap_usd
+        self.max_retries = max_retries
+        self.backoff_base_s = backoff_base_s
+        self.max_tokens = max_tokens
+        self.temperature = temperature
+        self.spent_usd = 0.0
+        self.provider = "anthropic" if "claude" in model.lower() else "openai"
+        self._client: Any = None
+
+    def _price(self, in_tokens: int, out_tokens: int) -> float:
+        rate_in, rate_out = _API_PRICING_PER_M.get(self.model, _API_PRICING_DEFAULT)
+        return (in_tokens * rate_in + out_tokens * rate_out) / 1_000_000.0
+
+    def _get_client(self) -> Any:
+        if self._client is not None:
+            return self._client
+        if self.provider == "anthropic":
+            import anthropic  # noqa: PLC0415
+
+            self._client = anthropic.Anthropic()
+        else:
+            from openai import OpenAI  # noqa: PLC0415
+
+            self._client = OpenAI()
+        return self._client
+
+    def _complete(self, prompt: str) -> tuple[str, int, int]:
+        """One API call. Returns (text, input_tokens, output_tokens).
+
+        Separated so tests can monkeypatch it without real network calls.
+        """
+        client = self._get_client()
+        if self.provider == "anthropic":
+            resp = client.messages.create(
+                model=self.model,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = resp.content[0].text
+            return text, resp.usage.input_tokens, resp.usage.output_tokens
+        resp = client.chat.completions.create(
+            model=self.model,
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = resp.choices[0].message.content or ""
+        return text, resp.usage.prompt_tokens, resp.usage.completion_tokens
+
+    def _complete_with_retry(self, prompt: str) -> tuple[str, int, int]:
+        last_err: Exception | None = None
+        for attempt in range(self.max_retries):
+            try:
+                return self._complete(prompt)
+            except Exception as err:  # noqa: BLE001 - API SDKs raise varied types
+                last_err = err
+                wait = self.backoff_base_s * (2**attempt)
+                logger.warning(
+                    "API call failed (attempt %d/%d): %s; retrying in %.1fs",
+                    attempt + 1,
+                    self.max_retries,
+                    err,
+                    wait,
+                )
+                time.sleep(wait)
+        raise RuntimeError(f"API judge call failed after retries: {last_err}")
+
+    def generate(
+        self,
+        prompts: list[str],
+        sampling_params: Any = None,  # noqa: ARG002 - vLLM-compat, unused
+        use_tqdm: bool = False,  # noqa: ARG002 - vLLM-compat, unused
+    ) -> list[_APIRequestOutput]:
+        """Score each prompt via the API, enforcing the cost cap."""
+        results: list[_APIRequestOutput] = []
+        for prompt in prompts:
+            if self.spent_usd >= self.cost_cap_usd:
+                raise RuntimeError(
+                    f"judge_c cost cap ${self.cost_cap_usd:.2f} reached "
+                    f"(spent ${self.spent_usd:.2f})"
+                )
+            text, in_tok, out_tok = self._complete_with_retry(prompt)
+            self.spent_usd += self._price(in_tok, out_tok)
+            results.append(_APIRequestOutput(text))
+        return results
+
+
 def create_judge_engine(judge_cfg: dict, scoring_cfg: dict) -> Any:
-    """Create vLLM engine for an open-weight judge.
+    """Create the judge backend: vLLM for open-weight, API for proprietary.
 
     Args:
         judge_cfg: Judge model config from judge.yaml.
         scoring_cfg: Scoring section from judge.yaml.
 
     Returns:
-        vLLM LLM instance.
-
-    Raises:
-        NotImplementedError: If judge is a proprietary API model (judge_c).
+        A vLLM ``LLM`` (open-weight judges) or an :class:`APIJudge`
+        (proprietary calibration judge). Both expose ``generate``.
     """
     if judge_cfg.get("role") == "proprietary_calibration":
-        raise NotImplementedError(
-            "API judge not yet implemented - use judge_a or judge_b"
+        api_cfg = judge_cfg.get("api", {})
+        return APIJudge(
+            model=judge_cfg["model"],
+            cost_cap_usd=float(judge_cfg.get("cost_cap_usd", 100.0)),
+            max_retries=int(api_cfg.get("max_retries", 5)),
         )
 
     from run_inference import create_engine
@@ -938,6 +1083,7 @@ def run_judge_pipeline(
     sampling_set: dict[str, Any],
     templates: dict[str, str],
     limit_per_file: int | None = None,
+    limit_total: int | None = None,
 ) -> dict[str, Any]:
     """Run judge scoring on all JSONL files in target directories.
 
@@ -955,6 +1101,8 @@ def run_judge_pipeline(
         templates: Judge prompt templates.
         limit_per_file: If set, judge only the first N records of each cell
             (stratified subset; same N questions across cells). None = all.
+        limit_total: If set, stop after this many newly scored records across
+            all files (calibration cap for the API judge). None = no cap.
 
     Returns:
         Summary dict with files_processed, records_scored, files_skipped.
@@ -968,6 +1116,9 @@ def run_judge_pipeline(
     total_scored = 0
 
     for source_path in source_files:
+        if limit_total is not None and total_scored >= limit_total:
+            logger.info("Reached limit_total=%d, stopping.", limit_total)
+            break
         records = read_jsonl(source_path)
         if not records:
             logger.warning("Empty file, skipping: %s", source_path)
@@ -975,6 +1126,12 @@ def run_judge_pipeline(
 
         if limit_per_file is not None:
             records = records[:limit_per_file]
+
+        if limit_total is not None:
+            remaining = limit_total - total_scored
+            if remaining <= 0:
+                break
+            records = records[:remaining]
 
         # Check if already judged (resumable)
         parts = source_path.parts
@@ -1100,6 +1257,10 @@ def main() -> None:
     # Get judge config
     judge_cfg = _get_judge_model_config(config, args.judge)
 
+    # CLI cost cap overrides the config for the API judge.
+    if args.cost_cap_usd is not None:
+        judge_cfg["cost_cap_usd"] = args.cost_cap_usd
+
     # Create judge engine + guided-JSON sampling params (per task)
     judge_llm = create_judge_engine(judge_cfg, scoring_cfg)
     sampling_set = build_judge_sampling_set(scoring_cfg)
@@ -1110,6 +1271,11 @@ def main() -> None:
     # Resolve target directories
     target_dirs = [d if d.is_absolute() else PROJECT_ROOT / d for d in args.target]
 
+    # Calibration cap: the API judge (judge_c) scores a bounded subset.
+    limit_total = None
+    if judge_cfg.get("role") == "proprietary_calibration":
+        limit_total = args.calibration_subset or judge_cfg.get("max_items", 1000)
+
     summary = run_judge_pipeline(
         judge_id=args.judge,
         target_dirs=target_dirs,
@@ -1119,7 +1285,11 @@ def main() -> None:
         sampling_set=sampling_set,
         templates=templates,
         limit_per_file=args.limit_per_file,
+        limit_total=limit_total,
     )
+
+    if isinstance(judge_llm, APIJudge):
+        logger.info("API judge spend: $%.2f", judge_llm.spent_usd)
 
     logger.info("Judge pipeline complete: %s", json.dumps(summary, indent=2))
 

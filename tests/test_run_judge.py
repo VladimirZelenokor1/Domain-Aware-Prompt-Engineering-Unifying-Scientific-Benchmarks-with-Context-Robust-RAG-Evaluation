@@ -18,6 +18,7 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(_SCRIPTS_DIR))
 
 from run_judge import (  # noqa: E402
+    APIJudge,
     build_claims_prompt,
     build_coverage_prompt,
     compute_citation_metrics,
@@ -508,6 +509,28 @@ class TestCoverage:
 # =========================================================================
 # Full pipeline (score_record)
 # =========================================================================
+
+
+class TestAPIJudge:
+    """Tests for the proprietary-API judge (judge_c), no real network."""
+
+    def test_provider_detected_from_model_name(self) -> None:
+        assert APIJudge("claude-sonnet-4-6").provider == "anthropic"
+        assert APIJudge("gpt-4o").provider == "openai"
+
+    def test_generate_returns_vllm_shaped_outputs(self) -> None:
+        judge = APIJudge("gpt-4o", cost_cap_usd=100.0)
+        judge._complete = lambda prompt: ('{"rubric": 3}', 100, 20)  # type: ignore[method-assign]
+        outs = judge.generate(["p1", "p2"])
+        assert len(outs) == 2
+        assert outs[0].outputs[0].text == '{"rubric": 3}'
+        assert judge.spent_usd > 0.0
+
+    def test_cost_cap_raises_before_overspending(self) -> None:
+        judge = APIJudge("gpt-4o", cost_cap_usd=0.0)
+        judge._complete = lambda prompt: ("x", 10, 10)  # type: ignore[method-assign]
+        with pytest.raises(RuntimeError, match="cost cap"):
+            judge.generate(["p"])
 
 
 class TestScoreRecordsBatched:
