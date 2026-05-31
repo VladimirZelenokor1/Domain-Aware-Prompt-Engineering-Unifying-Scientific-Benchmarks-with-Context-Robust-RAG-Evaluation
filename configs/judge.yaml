@@ -14,13 +14,13 @@
 
 main_set_judges:
   - id: judge_a
-    model: llama-3.1-8b-instruct-awq    # subject to VRAM check in Phase 7.1
+    model: llama-3.1-8b-judge-awq    # local dir under models/
     role: open_weight_primary
     must_differ_from_examinees: true
     hf_id_candidate: solidrust/Llama-3.1-8B-Instruct-AWQ-INT4
     fallback_if_oom: qwen2-7b-instruct-awq   # NOT Qwen2.5 (examinee family)
   - id: judge_b
-    model: mistral-7b-instruct-v0.3-awq  # distinct checkpoint from SciPhi-Mistral-7B-32k
+    model: mistral-7b-v0.3-judge-awq  # local dir under models/, distinct from SciPhi-Mistral
     role: open_weight_secondary
     must_differ_from_examinees: true
     hf_id_candidate: solidrust/Mistral-7B-Instruct-v0.3-AWQ
@@ -53,7 +53,7 @@ scoring:
     - self_confidence                      # judge-reported, 0-1
 
 nli:
-  model: cross-encoder/nli-deberta-v3-large
+  model: models/nli-deberta-v3-large    # local dir (avoid HF download)
   label_order: [contradiction, entailment, neutral]
 
 perturbations:
