@@ -30,6 +30,7 @@ from run_judge import (  # noqa: E402
     read_jsonl,
     save_judge_output,
     score_record,
+    score_records,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -507,6 +508,40 @@ class TestCoverage:
 # =========================================================================
 # Full pipeline (score_record)
 # =========================================================================
+
+
+class TestScoreRecordsBatched:
+    """Tests for the batched score_records path used by the pipeline."""
+
+    def test_batched_matches_per_record_keys_and_count(
+        self,
+        rag_record: dict,
+        closed_book_record: dict,
+        judge_llm: MockJudgeLLM,
+        nli_model: MockNLI,
+        templates: dict[str, str],
+        sampling_params: MockSamplingParams,
+    ) -> None:
+        sampling_set = {
+            "rubric": sampling_params,
+            "claims": sampling_params,
+            "coverage": sampling_params,
+        }
+        records = [rag_record, closed_book_record]
+        results = score_records(
+            records=records,
+            judge_llm=judge_llm,
+            nli_model=nli_model,
+            templates=templates,
+            sampling_set=sampling_set,
+        )
+        assert len(results) == 2
+        for r in results:
+            assert 0 <= r["rubric"] <= 5
+            assert 0.0 <= r["coverage"] <= 1.0
+        # RAG record gets faithfulness; closed-book stays None
+        assert results[0]["faithfulness"] is not None
+        assert results[1]["faithfulness"] is None
 
 
 class TestScoreRecord:

@@ -120,6 +120,107 @@ def _extract_json(raw: str) -> str:
 
 
 # =========================================================================
+# Guided-decoding JSON schemas (force valid JSON from the judge LLM)
+# =========================================================================
+
+RUBRIC_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "rubric": {"type": "integer", "minimum": 0, "maximum": 5},
+        "rationale": {"type": "string"},
+        "self_confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    },
+    "required": ["rubric", "rationale", "self_confidence"],
+}
+
+CLAIMS_JSON_SCHEMA = {
+    "type": "array",
+    "items": {"type": "string"},
+}
+
+COVERAGE_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "key_points_total": {"type": "integer", "minimum": 0},
+        "key_points_covered": {"type": "integer", "minimum": 0},
+        "missing_points": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["key_points_total", "key_points_covered"],
+}
+
+# Per-task output token caps (guided JSON is short; smaller = faster).
+_RUBRIC_MAX_TOKENS = 384
+_CLAIMS_MAX_TOKENS = 512
+_COVERAGE_MAX_TOKENS = 384
+
+
+def _build_guided_sampling(
+    schema: dict,
+    temperature: float,
+    seed: int,
+    max_tokens: int,
+) -> Any:
+    """Build a vLLM SamplingParams that forces output to match a JSON schema.
+
+    Handles both the newer ``GuidedDecodingParams`` API and the older
+    ``guided_json`` kwarg so the judge runs across vLLM versions.
+
+    Args:
+        schema: JSON schema the output must conform to.
+        temperature: Sampling temperature (0.0 for deterministic judging).
+        seed: RNG seed.
+        max_tokens: Max output tokens.
+
+    Returns:
+        Configured vLLM SamplingParams instance.
+    """
+    from vllm import SamplingParams
+
+    try:
+        from vllm.sampling_params import GuidedDecodingParams
+
+        return SamplingParams(
+            temperature=temperature,
+            seed=seed,
+            max_tokens=max_tokens,
+            n=1,
+            guided_decoding=GuidedDecodingParams(json=schema),
+        )
+    except ImportError:
+        return SamplingParams(
+            temperature=temperature,
+            seed=seed,
+            max_tokens=max_tokens,
+            n=1,
+            guided_json=schema,
+        )
+
+
+def build_judge_sampling_set(scoring_cfg: dict) -> dict[str, Any]:
+    """Build guided SamplingParams for each judge task.
+
+    Args:
+        scoring_cfg: Scoring section from judge.yaml.
+
+    Returns:
+        Dict with 'rubric', 'claims', 'coverage' SamplingParams.
+    """
+    temperature = scoring_cfg.get("judge_temperature", 0.0)
+    seed = scoring_cfg.get("judge_seed", 42)
+    return {
+        "rubric": _build_guided_sampling(
+            RUBRIC_JSON_SCHEMA, temperature, seed, _RUBRIC_MAX_TOKENS
+        ),
+        "claims": _build_guided_sampling(
+            CLAIMS_JSON_SCHEMA, temperature, seed, _CLAIMS_MAX_TOKENS
+        ),
+        "coverage": _build_guided_sampling(
+            COVERAGE_JSON_SCHEMA, temperature, seed, _COVERAGE_MAX_TOKENS
+        ),
+    }
+
+
+# =========================================================================
 # Rubric scoring
 # =========================================================================
 
@@ -498,6 +599,102 @@ def score_record(
     }
 
 
+def score_records(
+    records: list[dict],
+    judge_llm: Any,
+    nli_model: Any | None,
+    templates: dict[str, str],
+    sampling_set: dict[str, Any],
+) -> list[dict]:
+    """Score many records with batched judge calls (one generate per task).
+
+    Instead of 3 sequential generate() calls per record, issue one batched
+    generate() per task (rubric, claims, coverage) across all records. vLLM
+    schedules the whole batch concurrently, which is far faster than the
+    per-record path. NLI runs per record (already internally batched).
+
+    Args:
+        records: Inference output records for one cell file.
+        judge_llm: vLLM LLM (or mock) with a batched generate() method.
+        nli_model: CrossEncoder NLI model, or None for closed-book.
+        templates: Prompt templates (rubric, claims, coverage).
+        sampling_set: Dict of guided SamplingParams per task.
+
+    Returns:
+        List of per-record score dicts, aligned with ``records``.
+    """
+
+    def _model_answer(rec: dict) -> str:
+        return rec.get("parsed", {}).get("answer", rec.get("raw_response", ""))
+
+    # --- Pass 1: rubric (all records) ---
+    rubric_prompts = [build_rubric_prompt(templates["rubric"], r) for r in records]
+    rubric_raw = judge_llm.generate(
+        rubric_prompts, sampling_set["rubric"], use_tqdm=False
+    )
+    rubric_results = [parse_rubric_response(o.outputs[0].text) for o in rubric_raw]
+
+    # --- Pass 2: claims (RAG records only), then NLI per record ---
+    rag_idx = [
+        i
+        for i, r in enumerate(records)
+        if r.get("passages_used") and nli_model is not None
+    ]
+    claims_by_idx: dict[int, list[str]] = {}
+    if rag_idx:
+        claims_prompts = [
+            build_claims_prompt(templates["claims"], _model_answer(records[i]))
+            for i in rag_idx
+        ]
+        claims_raw = judge_llm.generate(
+            claims_prompts, sampling_set["claims"], use_tqdm=False
+        )
+        for i, out in zip(rag_idx, claims_raw):
+            claims_by_idx[i] = parse_claims_response(out.outputs[0].text)
+
+    # --- Pass 3: coverage (all records) ---
+    coverage_prompts = [
+        build_coverage_prompt(
+            templates["coverage"], r.get("gold_answer", ""), _model_answer(r)
+        )
+        for r in records
+    ]
+    coverage_raw = judge_llm.generate(
+        coverage_prompts, sampling_set["coverage"], use_tqdm=False
+    )
+    coverage_scores = [parse_coverage_response(o.outputs[0].text) for o in coverage_raw]
+
+    # --- Assemble per-record results ---
+    results: list[dict] = []
+    for i, rec in enumerate(records):
+        faithfulness = None
+        citation_precision = None
+        citation_recall = None
+        if i in claims_by_idx:
+            claims = claims_by_idx[i]
+            passages = rec["passages_used"]
+            faithfulness = compute_faithfulness(
+                claims, passages, nli_model, threshold=0.5
+            )
+            cit = compute_citation_metrics(claims, passages, nli_model, threshold=0.5)
+            citation_precision = cit["citation_precision"]
+            citation_recall = cit["citation_recall"]
+
+        results.append(
+            {
+                "question_id": rec.get("question_id", ""),
+                "rubric": rubric_results[i]["rubric"],
+                "rationale": rubric_results[i]["rationale"],
+                "faithfulness": faithfulness,
+                "citation_precision": citation_precision,
+                "citation_recall": citation_recall,
+                "coverage": coverage_scores[i],
+                "self_confidence": rubric_results[i]["self_confidence"],
+            }
+        )
+    return results
+
+
 # =========================================================================
 # I/O utilities
 # =========================================================================
@@ -724,12 +921,14 @@ def run_judge_pipeline(
     config: dict,
     judge_llm: Any,
     nli_model: Any | None,
-    sampling_params: Any,
+    sampling_set: dict[str, Any],
     templates: dict[str, str],
+    limit_per_file: int | None = None,
 ) -> dict[str, Any]:
     """Run judge scoring on all JSONL files in target directories.
 
-    Resumable: skips files that already have complete judge output.
+    Uses batched scoring (one generate() per task across all records of a
+    file). Resumable: skips files that already have complete judge output.
 
     Args:
         judge_id: Judge identifier.
@@ -737,8 +936,11 @@ def run_judge_pipeline(
         config: Parsed judge.yaml config.
         judge_llm: vLLM LLM or mock.
         nli_model: NLI CrossEncoder or None.
-        sampling_params: vLLM SamplingParams.
+        sampling_set: Dict of guided SamplingParams per task (rubric,
+            claims, coverage).
         templates: Judge prompt templates.
+        limit_per_file: If set, judge only the first N records of each cell
+            (stratified subset; same N questions across cells). None = all.
 
     Returns:
         Summary dict with files_processed, records_scored, files_skipped.
@@ -756,6 +958,9 @@ def run_judge_pipeline(
         if not records:
             logger.warning("Empty file, skipping: %s", source_path)
             continue
+
+        if limit_per_file is not None:
+            records = records[:limit_per_file]
 
         # Check if already judged (resumable)
         parts = source_path.parts
@@ -776,30 +981,21 @@ def run_judge_pipeline(
                 files_skipped += 1
                 continue
 
-        # Score each record
-        scored: list[dict] = []
-        for i, record in enumerate(records):
-            result = score_record(
-                record=record,
-                judge_llm=judge_llm,
-                nli_model=nli_model,
-                templates=templates,
-                sampling_params=sampling_params,
-            )
+        logger.info("Judging %d records from %s ...", len(records), source_path.name)
+        scored = score_records(
+            records=records,
+            judge_llm=judge_llm,
+            nli_model=nli_model,
+            templates=templates,
+            sampling_set=sampling_set,
+        )
+        for result in scored:
             result["judge_id"] = judge_id
-            scored.append(result)
-
-            if (i + 1) % 100 == 0:
-                logger.info(
-                    "Scored %d/%d records from %s",
-                    i + 1,
-                    len(records),
-                    source_path.name,
-                )
 
         save_judge_output(judge_id, source_path, scored, output_dir)
         files_processed += 1
         total_scored += len(scored)
+        logger.info("Done %s (%d scored)", source_path.name, len(scored))
 
     return {
         "judge_id": judge_id,
@@ -851,6 +1047,13 @@ def parse_args() -> argparse.Namespace:
         help="Hard cost cap in USD for judge_c",
     )
     parser.add_argument(
+        "--limit-per-file",
+        type=int,
+        default=None,
+        help="Judge only the first N records of each cell file "
+        "(stratified subset; same N questions across cells). Default: all.",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
@@ -883,9 +1086,9 @@ def main() -> None:
     # Get judge config
     judge_cfg = _get_judge_model_config(config, args.judge)
 
-    # Create judge engine
+    # Create judge engine + guided-JSON sampling params (per task)
     judge_llm = create_judge_engine(judge_cfg, scoring_cfg)
-    sampling_params = create_judge_sampling_params(scoring_cfg)
+    sampling_set = build_judge_sampling_set(scoring_cfg)
 
     # Load NLI model (only needed if any target has RAG outputs)
     nli_model = load_nli_model(nli_cfg)
@@ -899,8 +1102,9 @@ def main() -> None:
         config=config,
         judge_llm=judge_llm,
         nli_model=nli_model,
-        sampling_params=sampling_params,
+        sampling_set=sampling_set,
         templates=templates,
+        limit_per_file=args.limit_per_file,
     )
 
     logger.info("Judge pipeline complete: %s", json.dumps(summary, indent=2))
