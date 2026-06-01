@@ -38,6 +38,9 @@ EXPECTED_STRATEGIES = {"da", "ras", "ctl", "sc"}
 TOP_K = 10
 # noise_level -> number of top-k passages replaced by noise (configs/noise.yaml)
 NOISE_REPLACED = {0.0: 0, 0.2: 2, 0.4: 4, 0.6: 6}
+# A passage that was NOT replaced carries noise_type == "real"; replacements
+# carry "irrelevant"/"contradictory"/"injection".
+CLEAN_NOISE_TYPE = "real"
 
 RAG_CELL_RE = re.compile(r"^(bm25|dense|hybrid)_noise([0-9.]+)_(da|ras|ctl|sc)$")
 
@@ -115,10 +118,12 @@ def audit_track(track_dir: Path, n_cells_expected: int, is_rag: bool) -> None:
     total_empty_pred = 0
     total_records = 0
     empty_gold = 0
+    unanswerable = 0  # QASPER: empty gold by design (question_type == unanswerable)
     # RAG provenance counters
     retr_mismatch = 0
     noise_mismatch = 0
-    bad_topk = 0
+    bad_topk = 0  # passages_used length not in {0, TOP_K}
+    empty_passages = 0  # 0 retrieved passages (degenerate query)
     noise_count_mismatch = 0
 
     for f in files:
@@ -157,16 +162,26 @@ def audit_track(track_dir: Path, n_cells_expected: int, is_rag: bool) -> None:
             if not predicted_answer(r):
                 total_empty_pred += 1
             if not str(r.get("gold_answer", "")).strip():
-                empty_gold += 1
+                if r.get("question_type") == "unanswerable":
+                    unanswerable += 1  # expected (QASPER unanswerable)
+                else:
+                    empty_gold += 1
             if is_rag and cell_retr is not None:
                 if r.get("retriever") != cell_retr:
                     retr_mismatch += 1
                 if r.get("noise_level") not in (cell_noise, str(cell_noise)):
                     noise_mismatch += 1
                 passages = r.get("passages_used") or []
+                if len(passages) == 0:
+                    empty_passages += 1  # degenerate retrieval; no context
+                    continue
                 if len(passages) != TOP_K:
                     bad_topk += 1
-                n_noise = sum(1 for p in passages if p.get("noise_type"))
+                    continue
+                # noise passages = anything not tagged "real"
+                n_noise = sum(
+                    1 for p in passages if p.get("noise_type") != CLEAN_NOISE_TYPE
+                )
                 expected_noise = NOISE_REPLACED.get(cell_noise)
                 if expected_noise is not None and n_noise != expected_noise:
                     noise_count_mismatch += 1
@@ -201,8 +216,13 @@ def audit_track(track_dir: Path, n_cells_expected: int, is_rag: bool) -> None:
     )
     record(
         "FAIL" if empty_gold else "PASS",
-        f"{name}: {empty_gold} empty gold_answer",
+        f"{name}: {empty_gold} unexpected empty gold_answer",
     )
+    if unanswerable:
+        record(
+            "PASS",
+            f"{name}: {unanswerable} empty-gold are QASPER unanswerable (by design)",
+        )
     pct = 100.0 * total_empty_pred / total_records if total_records else 0.0
     record(
         "WARN" if pct > 5 else "PASS",
@@ -220,12 +240,18 @@ def audit_track(track_dir: Path, n_cells_expected: int, is_rag: bool) -> None:
         )
         record(
             "FAIL" if bad_topk else "PASS",
-            f"{name}: {bad_topk} records with passages_used != {TOP_K}",
+            f"{name}: {bad_topk} records with passages_used not in {{0, {TOP_K}}}",
         )
+        if empty_passages:
+            record(
+                "WARN",
+                f"{name}: {empty_passages} records with 0 retrieved passages "
+                f"(degenerate query; effectively no-context)",
+            )
         record(
             "FAIL" if noise_count_mismatch else "PASS",
-            f"{name}: {noise_count_mismatch} records whose noise-passage count "
-            f"!= config (noise actually applied per design)",
+            f"{name}: {noise_count_mismatch} (of records with {TOP_K} passages) whose "
+            f"noise-passage count != config (noise applied per design)",
         )
 
 
