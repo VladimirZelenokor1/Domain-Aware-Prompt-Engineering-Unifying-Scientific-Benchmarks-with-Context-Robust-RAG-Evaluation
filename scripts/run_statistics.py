@@ -537,34 +537,37 @@ def build_h3_table(stats_path: Path) -> tuple[list[dict], dict]:
         }
 
     rows: list[dict] = []
-    krip = data.get("krippendorff_alpha") or {}
-    for scope, payload in krip.items():
-        if not isinstance(payload, dict):
+    n_items = int(data.get("n_ab_items", 0))
+
+    # Krippendorff alpha (flat keys written by judge_aggregate.py).
+    for scope, key in (("ab", "krippendorff_ab"), ("abc", "krippendorff_abc")):
+        if key not in data:
             continue
         rows.append(
             {
                 "metric": f"krippendorff_alpha[{scope}]",
-                "value": float(payload.get("alpha", float("nan"))),
-                "n": int(payload.get("n_items", 0)),
-                "details": (f"raters={payload.get('raters', 'unknown')}"),
+                "value": float(data.get(key, float("nan"))),
+                "n": n_items,
+                "details": "judge_a,judge_b (ordinal rubric 0-5)"
+                if scope == "ab"
+                else "judge_a,judge_b,judge_c (equals ab if judge_c absent)",
             }
         )
 
-    ece = data.get("ece") or {}
-    for scope, payload in ece.items():
-        if not isinstance(payload, dict):
-            continue
+    # Expected Calibration Error on the MCQ subset.
+    if "ece_mcq" in data:
         rows.append(
             {
-                "metric": f"ece[{scope}]",
-                "value": float(payload.get("ece", float("nan"))),
-                "n": int(payload.get("n", 0)),
-                "details": f"n_bins={payload.get('n_bins', 'unknown')}",
+                "metric": "ece_mcq",
+                "value": float(data.get("ece_mcq", float("nan"))),
+                "n": int(data.get("ece_mcq_n", 0)),
+                "details": "self_confidence vs MCQ correctness, 10 bins",
             }
         )
 
-    wilcoxon = data.get("wilcoxon") or {}
-    for scope, payload in wilcoxon.items():
+    # Perturbation Wilcoxon (class1 = surface, class2 = semantic).
+    for scope in ("class1", "class2"):
+        payload = data.get(f"wilcoxon_{scope}")
         if not isinstance(payload, dict):
             continue
         rows.append(
@@ -572,7 +575,8 @@ def build_h3_table(stats_path: Path) -> tuple[list[dict], dict]:
                 "metric": f"wilcoxon[{scope}]",
                 "value": float(payload.get("statistic", float("nan"))),
                 "n": int(payload.get("n_pairs", 0)),
-                "details": f"pvalue={payload.get('pvalue', float('nan'))}",
+                "details": f"pvalue={payload.get('p_value', float('nan'))}, "
+                f"significant={payload.get('significant', False)}",
             }
         )
 
@@ -781,6 +785,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--alpha", type=float, default=0.05, help="BH FDR target")
     parser.add_argument(
+        "--exclude-models",
+        nargs="+",
+        default=None,
+        help="Model names to drop from closed-book and RAG rows before testing "
+        "(e.g. a robustness re-run excluding sciphi-mistral-7b).",
+    )
+    parser.add_argument(
         "--log-level",
         default="INFO",
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
@@ -814,6 +825,12 @@ def main(argv: list[str] | None = None) -> int:
         registry = load_model_registry(args.registry)
     else:
         logger.warning("model registry missing: %s", args.registry)
+
+    if args.exclude_models:
+        excluded = set(args.exclude_models)
+        closed_book = [r for r in closed_book if r.get("model") not in excluded]
+        rag = [r for r in rag if r.get("model") not in excluded]
+        logger.info("Excluded models %s (robustness re-run)", sorted(excluded))
 
     summary: dict[str, Any] = {}
 

@@ -367,26 +367,28 @@ def test_build_h2_table_detects_negative_noise_coefficient() -> None:
 
 
 def test_build_h3_table_reads_aggregate_stats(tmp_path: Path) -> None:
+    # Flat schema as actually produced by judge_aggregate.py.
     stats = {
-        "krippendorff_alpha": {
-            "rubric": {"alpha": 0.78, "n_items": 1000, "raters": ["judge_a", "judge_b"]}
-        },
-        "ece": {
-            "all": {"ece": 0.07, "n_bins": 10, "n": 800},
-        },
-        "wilcoxon": {
-            "noise_low_vs_high": {
-                "statistic": 12345.0,
-                "pvalue": 0.001,
-                "n_pairs": 700,
-            },
+        "krippendorff_ab": 0.78,
+        "krippendorff_abc": 0.78,
+        "n_ab_items": 1000,
+        "ece_mcq": 0.07,
+        "ece_mcq_n": 800,
+        "wilcoxon_class1": {"statistic": 0.0, "p_value": 1.0, "significant": False},
+        "wilcoxon_class2": {
+            "statistic": 12345.0,
+            "p_value": 0.001,
+            "significant": True,
         },
     }
     p = tmp_path / "aggregate_stats.json"
     p.write_text(json.dumps(stats), encoding="utf-8")
     rows, summary = build_h3_table(p)
-    assert any(r["metric"].startswith("krippendorff") for r in rows)
-    assert any(r["metric"].startswith("ece") for r in rows)
+    krip_rows = [r for r in rows if r["metric"].startswith("krippendorff")]
+    assert len(krip_rows) == 2
+    assert krip_rows[0]["value"] == pytest.approx(0.78)
+    assert krip_rows[0]["n"] == 1000
+    assert any(r["metric"] == "ece_mcq" for r in rows)
     assert any(r["metric"].startswith("wilcoxon") for r in rows)
     assert summary["sources"] == [str(p)]
 
