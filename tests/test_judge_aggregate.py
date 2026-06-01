@@ -18,6 +18,8 @@ _SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(_SCRIPTS_DIR))
 
 from judge_aggregate import (  # noqa: E402
+    _cell_key,
+    _compute_ece_mcq,
     aggregate_judge_outputs,
     aggregate_per_domain,
     compute_ece,
@@ -161,6 +163,82 @@ class TestComputeWilcoxon:
         scores_b = np.ones(20) * 2
         result = compute_wilcoxon(scores_a, scores_b)
         assert isinstance(result["significant"], bool)
+
+
+# =========================================================================
+# ECE on MCQ subset (composite-key join + normalized correctness)
+# =========================================================================
+
+
+class TestComputeECEMcq:
+    """Tests for _compute_ece_mcq (join + correctness on the MCQ subset)."""
+
+    def _judge(self, cell: str, qid: str, conf: float) -> dict:
+        return {"_cell": cell, "question_id": qid, "self_confidence": conf}
+
+    def _source(self, cell: str, qid: str, pred: str, gold: str) -> dict:
+        return {
+            "_cell": cell,
+            "question_id": qid,
+            "question_type": "mcq-4-choices",
+            "gold_answer": gold,
+            "parsed": {"answer_normalized": pred, "parse_success": True},
+        }
+
+    def test_ece_mcq_joins_per_cell_not_per_qid(self) -> None:
+        """Same qid in two cells must stay distinct (one pair each, not collapsed)."""
+        judge = [
+            self._judge("rag_main/m/bm25_noise0.0_da.jsonl", "q1", 0.9),
+            self._judge("rag_main/m/hybrid_noise0.6_da.jsonl", "q1", 0.9),
+        ]
+        source = [
+            self._source(
+                "rag_main/m/bm25_noise0.0_da.jsonl", "q1", "A", "A"
+            ),  # correct
+            self._source(
+                "rag_main/m/hybrid_noise0.6_da.jsonl", "q1", "B", "A"
+            ),  # wrong
+        ]
+        _ece, n = _compute_ece_mcq(judge, source)
+        assert n == 2  # both cells counted, not collapsed to one qid
+
+    def test_ece_mcq_overconfident_high(self) -> None:
+        """High confidence but wrong MCQ answers -> large ECE."""
+        judge = [self._judge("c/m/f.jsonl", f"q{i}", 0.9) for i in range(20)]
+        source = [self._source("c/m/f.jsonl", f"q{i}", "B", "A") for i in range(20)]
+        ece, n = _compute_ece_mcq(judge, source)
+        assert n == 20
+        assert ece > 0.5
+
+    def test_ece_mcq_normalizes_letter_labels(self) -> None:
+        """'A)' vs gold 'A' counts as correct via MC normalization."""
+        judge = [self._judge("c/m/f.jsonl", "q1", 0.8)]
+        source = [self._source("c/m/f.jsonl", "q1", "A) because ...", "A")]
+        ece, n = _compute_ece_mcq(judge, source)
+        assert n == 1
+        # confidence 0.8 vs accuracy 1.0 -> ECE = 0.2
+        assert ece == pytest.approx(0.2, abs=1e-6)
+
+    def test_ece_mcq_skips_non_mcq(self) -> None:
+        """Non-MCQ question types are excluded -> no pairs."""
+        judge = [self._judge("c/m/f.jsonl", "q1", 0.8)]
+        source = [
+            {
+                "_cell": "c/m/f.jsonl",
+                "question_id": "q1",
+                "question_type": "open-ended-qa",
+                "gold_answer": "x",
+                "parsed": {"answer_normalized": "x", "parse_success": True},
+            }
+        ]
+        ece, n = _compute_ece_mcq(judge, source)
+        assert n == 0
+        assert ece == pytest.approx(0.0)
+
+    def test_cell_key_combines_cell_and_qid(self) -> None:
+        """Composite key is '<cell>::<question_id>'."""
+        rec = {"_cell": "rag_main/m/f.jsonl", "question_id": "q9"}
+        assert _cell_key(rec) == "rag_main/m/f.jsonl::q9"
 
 
 # =========================================================================

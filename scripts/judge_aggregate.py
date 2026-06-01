@@ -69,8 +69,31 @@ def read_jsonl(path: Path) -> list[dict]:
     return records
 
 
+def _cell_key(record: dict) -> str:
+    """Build the cell-level identifier for a record.
+
+    The inter-rater unit is a single judged answer = (cell, question). The
+    same ``question_id`` is judged in every matrix cell (model x strategy x
+    retriever x noise), so joining on ``question_id`` alone collapses 216
+    cells into one (last-write-wins). ``_cell`` is the source-relative path
+    (``<source_root>/<model>/<file>``) attached at load time; combined with
+    ``question_id`` it uniquely identifies the answer.
+
+    Args:
+        record: A judge or source record carrying ``_cell`` and ``question_id``.
+
+    Returns:
+        Composite key ``"<cell>::<question_id>"``.
+    """
+    return f"{record.get('_cell', '')}::{record.get('question_id', '')}"
+
+
 def _load_all_judge_records(judge_dir: Path) -> list[dict]:
     """Load every JSONL record from all judge sub-directories.
+
+    Each record is tagged with ``_cell`` (the source-relative path, with the
+    leading ``judge_id`` component stripped) so judge and source records can
+    be joined per answer rather than per ``question_id``.
 
     Args:
         judge_dir: Root directory containing {judge_id}/{...}/*.jsonl files.
@@ -82,14 +105,22 @@ def _load_all_judge_records(judge_dir: Path) -> list[dict]:
     for jsonl_path in sorted(judge_dir.rglob("*.jsonl")):
         if jsonl_path.name == "aggregate_stats.json":
             continue
-        batch = read_jsonl(jsonl_path)
-        records.extend(batch)
+        # judge_dir/<judge_id>/<source_root>/<model>/<file> -> "<source_root>/<model>/<file>"
+        rel_parts = jsonl_path.relative_to(judge_dir).parts[1:]
+        cell = "/".join(rel_parts)
+        for rec in read_jsonl(jsonl_path):
+            rec["_cell"] = cell
+            records.append(rec)
     logger.debug("Loaded %d total judge records from %s", len(records), judge_dir)
     return records
 
 
 def _load_all_source_records(source_dirs: list[Path]) -> list[dict]:
     """Load every JSONL record from all source directories.
+
+    Each record is tagged with ``_cell`` (path relative to the parent of the
+    source dir, i.e. ``<source_root>/<model>/<file>``) so it matches the
+    ``_cell`` attached to judge records.
 
     Args:
         source_dirs: List of root directories containing source inference outputs.
@@ -100,7 +131,10 @@ def _load_all_source_records(source_dirs: list[Path]) -> list[dict]:
     records: list[dict] = []
     for source_dir in source_dirs:
         for jsonl_path in sorted(source_dir.rglob("*.jsonl")):
-            records.extend(read_jsonl(jsonl_path))
+            cell = "/".join(jsonl_path.relative_to(source_dir.parent).parts)
+            for rec in read_jsonl(jsonl_path):
+                rec["_cell"] = cell
+                records.append(rec)
     logger.debug(
         "Loaded %d source records from %s dirs", len(records), len(source_dirs)
     )
@@ -379,29 +413,39 @@ def _aggregate_per_judge(judge_records: list[dict]) -> dict[str, dict[str, Any]]
 def _compute_ece_mcq(
     judge_records: list[dict],
     source_records: list[dict],
-) -> float:
+) -> tuple[float, int]:
     """Compute ECE restricted to MCQ questions.
 
-    Uses self_confidence from judge records and binary correctness derived
-    from comparing parsed answer to gold_answer in source records.
+    Pairs ``self_confidence`` from each judge record with the binary
+    correctness of the matching source answer. The join is per answer
+    (``_cell`` + ``question_id``), not per ``question_id``, so the
+    confidence/correctness pair refers to the exact answer that was judged.
+    Correctness reuses ``compute_metrics`` extraction/normalisation
+    (``get_predicted_answer`` + ``compute_exact_match``) rather than a naive
+    string compare, so MCQ letters are normalised consistently with the
+    accuracy tables.
 
     Args:
-        judge_records: All judge output records.
-        source_records: All source inference records.
+        judge_records: All judge output records (tagged with ``_cell``).
+        source_records: All source inference records (tagged with ``_cell``).
 
     Returns:
-        ECE value for MCQ subset; 0.0 if no MCQ records found.
+        Tuple of (ECE value, number of MCQ pairs); (0.0, 0) if none found.
     """
+    from compute_metrics import (  # noqa: PLC0415
+        compute_exact_match,
+        get_predicted_answer,
+    )
+
     source_map: dict[str, dict] = {
-        rec["question_id"]: rec for rec in source_records if "question_id" in rec
+        _cell_key(rec): rec for rec in source_records if "question_id" in rec
     }
 
     confidences: list[float] = []
     correctness: list[float] = []
 
     for rec in judge_records:
-        qid = rec.get("question_id", "")
-        src = source_map.get(qid)
+        src = source_map.get(_cell_key(rec))
         if src is None:
             continue
         qtype = src.get("question_type", "")
@@ -410,19 +454,17 @@ def _compute_ece_mcq(
         conf = rec.get("self_confidence")
         if conf is None:
             continue
-        parsed = src.get("parsed", {})
-        predicted = parsed.get("answer", "")
+        predicted = get_predicted_answer(src)
         gold = src.get("gold_answer", "")
-        correct = (
-            1.0 if str(predicted).strip().upper() == str(gold).strip().upper() else 0.0
-        )
+        correct = 1.0 if compute_exact_match(predicted, gold, qtype) else 0.0
         confidences.append(float(conf))
         correctness.append(correct)
 
     if not confidences:
-        return 0.0
+        return 0.0, 0
 
-    return compute_ece(np.array(confidences), np.array(correctness))
+    ece = compute_ece(np.array(confidences), np.array(correctness))
+    return ece, len(confidences)
 
 
 # =========================================================================
@@ -527,15 +569,17 @@ def aggregate_judge_outputs(
         len(all_source_records),
     )
 
-    # Group judge records by judge_id -> {question_id: rubric}
+    # Group judge records by judge_id -> {cell::question_id: rubric}. The
+    # composite key keeps every judged answer distinct (see _cell_key);
+    # joining on question_id alone would collapse all matrix cells.
     judge_ratings: dict[str, dict[str, int]] = {}
     for rec in all_judge_records:
         jid = rec.get("judge_id", "unknown")
-        qid = rec.get("question_id", "")
+        item = _cell_key(rec)
         rubric = int(rec.get("rubric", 0))
         if jid not in judge_ratings:
             judge_ratings[jid] = {}
-        judge_ratings[jid][qid] = rubric
+        judge_ratings[jid][item] = rubric
 
     # Krippendorff alpha between judge_a and judge_b
     ratings_ab: dict[str, dict[str, int]] = {
@@ -557,8 +601,13 @@ def aggregate_judge_outputs(
         compute_krippendorff_alpha(ratings_abc) if len(ratings_abc) >= 2 else 0.0
     )
 
+    # Number of answers jointly rated by judge_a and judge_b (the alpha unit).
+    items_a = set(judge_ratings.get("judge_a", {}))
+    items_b = set(judge_ratings.get("judge_b", {}))
+    n_ab_items = len(items_a & items_b)
+
     # ECE on MCQ subset
-    ece_mcq = _compute_ece_mcq(all_judge_records, all_source_records)
+    ece_mcq, ece_mcq_n = _compute_ece_mcq(all_judge_records, all_source_records)
 
     # Wilcoxon for two perturbation classes
     wilcoxon_class1 = _compute_perturbation_wilcoxon(
@@ -577,7 +626,9 @@ def aggregate_judge_outputs(
     return {
         "krippendorff_ab": krippendorff_ab,
         "krippendorff_abc": krippendorff_abc,
+        "n_ab_items": n_ab_items,
         "ece_mcq": ece_mcq,
+        "ece_mcq_n": ece_mcq_n,
         "wilcoxon_class1": wilcoxon_class1,
         "wilcoxon_class2": wilcoxon_class2,
         "per_domain": per_domain,
