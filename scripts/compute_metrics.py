@@ -19,8 +19,9 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from rouge_score import rouge_scorer
-from sacrebleu.metrics import BLEU
+# rouge_score / sacrebleu are imported lazily inside the functions that use
+# them so this module's helpers (get_predicted_answer, compute_exact_match)
+# can be imported without those optional dependencies installed.
 
 # ---------------------------------------------------------------------------
 # Path setup
@@ -42,6 +43,7 @@ TEXT_TYPES = {"open-ended-qa", "filling", "relation_extraction", "true_or_false"
 # =========================================================================
 # Normalization helpers
 # =========================================================================
+
 
 def normalize_mc_answer(answer: str | None) -> str:
     """Normalize MC answer to uppercase letter (A-D)."""
@@ -98,6 +100,7 @@ def get_parse_success(record: dict) -> bool:
 # Exact Match
 # =========================================================================
 
+
 def compute_exact_match(predicted: str, gold: str, question_type: str) -> bool:
     """Compute exact match for a single question.
 
@@ -135,9 +138,11 @@ def compute_exact_match(predicted: str, gold: str, question_type: str) -> bool:
 _ROUGE_SCORER = None
 
 
-def _get_rouge_scorer() -> rouge_scorer.RougeScorer:
+def _get_rouge_scorer() -> "rouge_scorer.RougeScorer":  # noqa: F821
     global _ROUGE_SCORER  # noqa: PLW0603
     if _ROUGE_SCORER is None:
+        from rouge_score import rouge_scorer  # noqa: PLC0415
+
         _ROUGE_SCORER = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)
     return _ROUGE_SCORER
 
@@ -159,6 +164,7 @@ def compute_rouge_l(predicted: str, gold: str) -> float:
 # BLEU-4
 # =========================================================================
 
+
 def compute_bleu_corpus(predictions: list[str], references: list[str]) -> float:
     """Compute corpus-level BLEU-4.
 
@@ -171,6 +177,8 @@ def compute_bleu_corpus(predictions: list[str], references: list[str]) -> float:
     """
     if not predictions or not references:
         return 0.0
+    from sacrebleu.metrics import BLEU  # noqa: PLC0415
+
     bleu = BLEU(effective_order=True)
     # sacrebleu expects references as list of lists
     refs_wrapped = [[r] for r in references]
@@ -181,6 +189,7 @@ def compute_bleu_corpus(predictions: list[str], references: list[str]) -> float:
 # =========================================================================
 # Per-cell metrics computation
 # =========================================================================
+
 
 def compute_cell_metrics(records: list[dict]) -> dict[str, Any]:
     """Compute all metrics for a single cell (model x strategy).
@@ -196,6 +205,9 @@ def compute_cell_metrics(records: list[dict]) -> dict[str, Any]:
 
     model = records[0].get("model", "unknown")
     strategy = records[0].get("strategy", "unknown")
+    # RAG records carry retriever/noise_level; closed-book records do not.
+    retriever = records[0].get("retriever")
+    noise_level = records[0].get("noise_level")
     total = len(records)
 
     # Accumulators for breakdowns
@@ -257,8 +269,16 @@ def compute_cell_metrics(records: list[dict]) -> dict[str, Any]:
             result["rouge_l_count"] = len(rouge_vals)
 
         # BLEU-4: only for text-type entries
-        text_preds = [e["predicted"] for e in entries if e["question_type"] in TEXT_TYPES and e["predicted"]]
-        text_golds = [e["gold"] for e in entries if e["question_type"] in TEXT_TYPES and e["predicted"]]
+        text_preds = [
+            e["predicted"]
+            for e in entries
+            if e["question_type"] in TEXT_TYPES and e["predicted"]
+        ]
+        text_golds = [
+            e["gold"]
+            for e in entries
+            if e["question_type"] in TEXT_TYPES and e["predicted"]
+        ]
         if text_preds:
             result["bleu_4"] = round(compute_bleu_corpus(text_preds, text_golds), 4)
             result["bleu_4_count"] = len(text_preds)
@@ -270,6 +290,8 @@ def compute_cell_metrics(records: list[dict]) -> dict[str, Any]:
     metrics: dict[str, Any] = {
         "model": model,
         "strategy": strategy,
+        "retriever": retriever,
+        "noise_level": noise_level,
         "total_questions": total,
         "parse_rate": round(parse_ok_total / total, 4),
         "overall": _aggregate(groups["overall"]["_all"]),
@@ -284,6 +306,7 @@ def compute_cell_metrics(records: list[dict]) -> dict[str, Any]:
 # =========================================================================
 # I/O helpers
 # =========================================================================
+
 
 def load_cell(path: Path) -> list[dict]:
     """Load JSONL records from a cell file."""
@@ -320,6 +343,7 @@ def discover_cells(base_dir: Path) -> list[tuple[str, str, Path]]:
 # Summary table
 # =========================================================================
 
+
 def build_summary_table(all_metrics: list[dict]) -> list[dict]:
     """Build a flat summary table from all cell metrics."""
     rows = []
@@ -332,6 +356,12 @@ def build_summary_table(all_metrics: list[dict]) -> list[dict]:
             "exact_match": m["overall"]["exact_match"],
             "em_parsed": m["overall"]["em_parsed"],
         }
+        # RAG cells carry retriever/noise_level (H2 needs them); closed-book
+        # cells leave them None - emit only when present.
+        if m.get("retriever") is not None:
+            row["retriever"] = m["retriever"]
+        if m.get("noise_level") is not None:
+            row["noise_level"] = m["noise_level"]
         if "rouge_l_f1" in m["overall"]:
             row["rouge_l_f1"] = m["overall"]["rouge_l_f1"]
         if "bleu_4" in m["overall"]:
@@ -344,7 +374,9 @@ def print_summary(summary: list[dict]) -> None:
     """Pretty-print summary table to console."""
     print("\n" + "=" * 85)
     print("CLOSED-BOOK RESULTS (dev.json)")
-    print("ROUGE-L and BLEU-4 computed on non-MC questions only (open-ended, T/F, fill, relext)")
+    print(
+        "ROUGE-L and BLEU-4 computed on non-MC questions only (open-ended, T/F, fill, relext)"
+    )
     print("=" * 95)
     header = f"{'Model':<22} {'Strategy':<10} {'Parse%':>8} {'EM':>8} {'EM_parsed':>10} {'ROUGE-L*':>10} {'BLEU-4*':>9}"
     print(header)
@@ -366,13 +398,17 @@ def print_summary(summary: list[dict]) -> None:
 
     # Best EM
     best_em = max(summary, key=lambda r: r["exact_match"])
-    print(f"Best EM:      {best_em['model']} + {best_em['strategy']} ({best_em['exact_match']:.4f})")
+    print(
+        f"Best EM:      {best_em['model']} + {best_em['strategy']} ({best_em['exact_match']:.4f})"
+    )
 
     # Best ROUGE-L
     rouge_rows = [r for r in summary if "rouge_l_f1" in r]
     if rouge_rows:
         best_rouge = max(rouge_rows, key=lambda r: r["rouge_l_f1"])
-        print(f"Best ROUGE-L: {best_rouge['model']} + {best_rouge['strategy']} ({best_rouge['rouge_l_f1']:.4f})")
+        print(
+            f"Best ROUGE-L: {best_rouge['model']} + {best_rouge['strategy']} ({best_rouge['rouge_l_f1']:.4f})"
+        )
 
     print("=" * 80)
 
@@ -403,7 +439,9 @@ def print_analysis(all_metrics: list[dict], summary: list[dict]) -> None:
     ras_avg = strat_avg.get("ras", 0)
     delta = ras_avg - da_avg
     direction = "improves" if delta > 0 else "degrades"
-    print(f"3. RAS vs DA: RAS {direction} by {abs(delta):.4f} (DA={da_avg:.4f}, RAS={ras_avg:.4f})")
+    print(
+        f"3. RAS vs DA: RAS {direction} by {abs(delta):.4f} (DA={da_avg:.4f}, RAS={ras_avg:.4f})"
+    )
 
     # 4. Model x strategy interaction
     print("4. Best strategy per model:")
@@ -418,14 +456,16 @@ def print_analysis(all_metrics: list[dict], summary: list[dict]) -> None:
     if others:
         avg_7b = sum(others.values()) / len(others)
         gap = avg_7b - llama_avg
-        print(f"5. Llama-3B vs 7B avg: gap={gap:.4f} (3B={llama_avg:.4f}, 7B-avg={avg_7b:.4f})")
+        print(
+            f"5. Llama-3B vs 7B avg: gap={gap:.4f} (3B={llama_avg:.4f}, 7B-avg={avg_7b:.4f})"
+        )
 
     # 6. Parse rate issues
     low_parse = [r for r in summary if r["parse_rate"] < 0.95]
     if low_parse:
         print("6. Low parse rate (<95%):")
         for r in low_parse:
-            print(f"   {r['model']}/{r['strategy']}: {r['parse_rate']*100:.1f}%")
+            print(f"   {r['model']}/{r['strategy']}: {r['parse_rate'] * 100:.1f}%")
     else:
         print("6. All cells have parse rate >= 95%")
 
@@ -436,6 +476,7 @@ def print_analysis(all_metrics: list[dict], summary: list[dict]) -> None:
 # Main
 # =========================================================================
 
+
 def main() -> None:
     """Run metrics computation across all cells."""
     parser = argparse.ArgumentParser(description="Compute closed-book metrics")
@@ -445,9 +486,15 @@ def main() -> None:
         default=PROJECT_ROOT / "outputs" / "closed_book",
         help="Base directory with model subdirectories",
     )
-    parser.add_argument("--models", type=str, default=None, help="Comma-separated model filter")
-    parser.add_argument("--strategies", type=str, default=None, help="Comma-separated strategy filter")
-    parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING"])
+    parser.add_argument(
+        "--models", type=str, default=None, help="Comma-separated model filter"
+    )
+    parser.add_argument(
+        "--strategies", type=str, default=None, help="Comma-separated strategy filter"
+    )
+    parser.add_argument(
+        "--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING"]
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
