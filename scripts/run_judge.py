@@ -775,6 +775,30 @@ def _strip_surrogates(value: Any) -> Any:
     return value
 
 
+def _judge_relative_path(source_path: Path) -> Path:
+    """Build the judge-output relative path from a source path.
+
+    Preserves the source-root component to avoid filename collisions across
+    tracks (e.g. ``rag_main/<model>/bm25_noise0.0_da.jsonl`` and
+    ``qasper_main/<model>/bm25_noise0.0_da.jsonl`` share model/filename but
+    must not overwrite each other). Uses the last three components
+    (source_root/model/filename) when available.
+
+    Args:
+        source_path: Original source JSONL path.
+
+    Returns:
+        Relative path ``<source_root>/<model>/<filename>`` (or shorter when
+        the source path has fewer components).
+    """
+    parts = source_path.parts
+    if len(parts) >= 3:
+        return Path(parts[-3]) / parts[-2] / parts[-1]
+    if len(parts) == 2:
+        return Path(parts[-2]) / parts[-1]
+    return Path(source_path.name)
+
+
 def save_judge_output(
     judge_id: str,
     source_path: Path,
@@ -783,7 +807,7 @@ def save_judge_output(
 ) -> Path:
     """Save judge outputs to JSONL.
 
-    Path format: {output_dir}/{judge_id}/{source_stem}.jsonl
+    Path format: {output_dir}/{judge_id}/{source_root}/{model}/{filename}
 
     Args:
         judge_id: Judge identifier (judge_a, judge_b, judge_c).
@@ -794,15 +818,10 @@ def save_judge_output(
     Returns:
         Path to the written JSONL file.
     """
-    # Preserve the model/strategy structure from source path
-    # e.g. source: outputs/closed_book_main/qwen2.5-7b/da.jsonl
-    # -> judge output: {output_dir}/judge_a/qwen2.5-7b/da.jsonl
-    # Use last two path components (model_dir/filename)
-    parts = source_path.parts
-    if len(parts) >= 2:
-        relative = Path(parts[-2]) / parts[-1]
-    else:
-        relative = Path(source_path.name)
+    # Preserve source_root/model/strategy structure from source path
+    # e.g. source: outputs/qasper_main/qwen2.5-7b/bm25_noise0.0_da.jsonl
+    # -> judge output: {output_dir}/judge_a/qasper_main/qwen2.5-7b/bm25_noise0.0_da.jsonl
+    relative = _judge_relative_path(source_path)
 
     out_path = output_dir / judge_id / relative
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1153,11 +1172,7 @@ def run_judge_pipeline(
             records = records[:remaining]
 
         # Check if already judged (resumable)
-        parts = source_path.parts
-        if len(parts) >= 2:
-            relative = Path(parts[-2]) / parts[-1]
-        else:
-            relative = Path(source_path.name)
+        relative = _judge_relative_path(source_path)
         judge_out = output_dir / judge_id / relative
 
         if judge_out.exists():

@@ -19,6 +19,7 @@ sys.path.insert(0, str(_SCRIPTS_DIR))
 
 from run_judge import (  # noqa: E402
     APIJudge,
+    _judge_relative_path,
     build_claims_prompt,
     build_coverage_prompt,
     compute_citation_metrics,
@@ -535,6 +536,30 @@ class TestAPIJudge:
 
 class TestSaveJudgeOutput:
     """Saving must tolerate stray surrogate code points in judge text."""
+
+    def test_source_root_disambiguates_colliding_names(self, tmp_path: Path) -> None:
+        # rag_main and qasper_main share model/filename; outputs must not collide
+        rec_rag = {"question_id": "rag1", "rubric": 1}
+        rec_qasper = {"question_id": "qasper1", "rubric": 5}
+        out_rag = save_judge_output(
+            "judge_a",
+            Path("outputs/rag_main/qwen2.5-7b/bm25_noise0.0_da.jsonl"),
+            [rec_rag],
+            tmp_path,
+        )
+        out_qasper = save_judge_output(
+            "judge_a",
+            Path("outputs/qasper_main/qwen2.5-7b/bm25_noise0.0_da.jsonl"),
+            [rec_qasper],
+            tmp_path,
+        )
+        assert out_rag != out_qasper
+        assert out_rag.parent.name == "qwen2.5-7b"
+        assert out_rag.parent.parent.name == "rag_main"
+        assert out_qasper.parent.parent.name == "qasper_main"
+        assert _judge_relative_path(
+            Path("outputs/qasper_main/qwen2.5-7b/bm25_noise0.0_da.jsonl")
+        ) == Path("qasper_main/qwen2.5-7b/bm25_noise0.0_da.jsonl")
 
     def test_handles_surrogate_in_rationale(self, tmp_path: Path) -> None:
         rec = {
