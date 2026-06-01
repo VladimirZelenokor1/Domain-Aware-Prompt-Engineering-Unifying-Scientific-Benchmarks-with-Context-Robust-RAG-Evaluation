@@ -759,6 +759,22 @@ def read_jsonl(path: Path) -> list[dict]:
     return records
 
 
+def _strip_surrogates(value: Any) -> Any:
+    """Recursively replace lone UTF-8 surrogate code points in strings.
+
+    Judge outputs occasionally contain a stray surrogate (e.g. '\\udc0c')
+    which raises UnicodeEncodeError when written with encoding='utf-8'.
+    Replace such code points so the JSONL always serialises.
+    """
+    if isinstance(value, str):
+        return value.encode("utf-8", "replace").decode("utf-8")
+    if isinstance(value, dict):
+        return {k: _strip_surrogates(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_strip_surrogates(v) for v in value]
+    return value
+
+
 def save_judge_output(
     judge_id: str,
     source_path: Path,
@@ -793,7 +809,7 @@ def save_judge_output(
 
     with open(out_path, "w", encoding="utf-8") as f:
         for record in scored_records:
-            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+            f.write(json.dumps(_strip_surrogates(record), ensure_ascii=False) + "\n")
 
     logger.info("Saved %d judge records to %s", len(scored_records), out_path)
     return out_path

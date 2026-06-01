@@ -533,6 +533,23 @@ class TestAPIJudge:
             judge.generate(["p"])
 
 
+class TestSaveJudgeOutput:
+    """Saving must tolerate stray surrogate code points in judge text."""
+
+    def test_handles_surrogate_in_rationale(self, tmp_path: Path) -> None:
+        rec = {
+            "question_id": "x",
+            "rubric": 3,
+            "rationale": "bad\udc0cchar",  # lone surrogate that breaks utf-8
+        }
+        out = save_judge_output(
+            "judge_a", Path("outputs/rag_main/qwen2.5-7b/da.jsonl"), [rec], tmp_path
+        )
+        rows = [json.loads(line) for line in open(out, encoding="utf-8")]
+        assert len(rows) == 1
+        assert rows[0]["rubric"] == 3
+
+
 class TestScoreRecordsBatched:
     """Tests for the batched score_records path used by the pipeline."""
 
