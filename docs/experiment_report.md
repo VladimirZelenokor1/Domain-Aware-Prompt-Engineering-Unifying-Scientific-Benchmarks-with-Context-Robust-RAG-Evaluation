@@ -291,82 +291,83 @@ hypothesis-level detail.
 
 ---
 
-## 3. Hypotheses
+## 3. Hypotheses (thesis RQ1-RQ3)
 
-### H1 - Does RAG benefit scale with model size?
+These are the thesis's formal hypotheses. Section 3S collects supplementary
+accuracy-based analyses that address related but distinct questions and are
+retained as robustness/exploratory results.
 
-**Statement.** Larger models gain more (or lose less) from RAG than smaller
-models.
+### H1 (RQ1) - Domain-aware rubric vs lexical metrics
 
-**Method.** Per (model, strategy), RAG improvement = mean RAG EM - closed-book
-EM. Correlate model size (params_b) with improvement using Pearson r and
-Kendall's tau; compare corr(size, RAG) vs corr(size, closed-book) with
-Steiger's z. BH-FDR over the H1 family.
+**Statement.** On the unambiguous-gold closed-book subset, the rubric-based
+judge score aligns with correctness better than lexical metrics (ROUGE-L,
+BLEU-4); and on the open-ended subset, the strategy ranking by rubric differs
+from the ranking by lexical metrics. Script: `analyze_h1_metric_alignment.py`.
+
+**Method.** Point-biserial r(metric, binary correctness) on the unambiguous
+subset (MCQ + true/false, n = 384), compared rubric-vs-lexical with the
+Williams test for dependent correlations (Bonferroni alpha = 0.025);
+Kendall's tau between strategy rankings on the open-ended subset
+(open-ended-qa + relation-extraction, n = 96). Rubric = mean of judge_a/b.
 
 **Result.**
 
-- Pearson r(size, RAG-improvement) = **0.174, p = 0.741** (not significant).
-- Kendall tau = 0.138, p = 0.702 (not significant).
-- Steiger's z = -0.588, p = 0.557 (no significant difference between the two
-  correlations).
-- corr(size, closed-book) = 0.624; corr(size, RAG) = 0.348.
-- Every model's RAG delta is negative.
-- None of the H1 tests survive FDR.
+| metric | r_pb(metric, correct) | Williams vs rubric |
+|---|---|---|
+| **rubric** | **0.674** | - |
+| ROUGE-L | 0.533 | t = 3.97, p = 8.6e-5 (rubric higher) |
+| BLEU-4 | 0.387 | t = 7.45, p = 6.4e-13 (rubric higher) |
 
-**Interpretation.** **H1 is not supported.** RAG uniformly reduces MCQ accuracy
-relative to closed-book, and the size of that reduction does not scale with
-model size. Larger models are better at closed-book QA, but that advantage does
-not translate into a larger RAG benefit (because there is no RAG benefit on
-this MCQ task).
+Strategy ranking (open-ended): rubric = RAS > CTL > DA > SC; vs ROUGE-L
+Kendall tau = 0.667; vs BLEU-4 tau = 0.333.
 
-### H2 - Are models robust to retrieval noise, and do strategy/retriever matter?
+**Interpretation.** **H1 is supported.** The rubric correlates with gold
+correctness significantly more strongly than either lexical metric (Williams
+test, both Bonferroni-significant), confirming that domain-aware rubric scoring
+captures answer quality better than surface overlap. Strategy rankings by
+rubric and by lexical metrics diverge (tau < 1), so the choice of metric
+changes conclusions about prompting strategies. Caveat: the predicted
+"largest divergence at RAS" did not hold - RAS ranks top under every metric;
+the divergence is in the middle of the ranking.
 
-**Statement.** Answer quality degrades with retrieval noise; prompting
-strategy and retriever modulate robustness.
+### H2 (RQ2) - Closed-book competence and RAG robustness
 
-**Method.** Linear mixed-effects model with a random intercept per model:
-`score ~ noise_level + C(strategy) + C(retriever) + (1 | model)`, fit by REML
-(statsmodels). n = 144 cells, 6 model groups. BH-FDR over the H2 family.
+**Statement.** Closed-book scientific competence predicts answer quality under
+RAG, and quality degrades as retrieval noise rises from 0% to 60%. Script:
+`analyze_h2_competence_robustness.py`.
 
-**Result (full model):**
+**Method.** Question-level mixed-effects model on the judged RAG subset
+(n = 1920): `rubric ~ closed_book_correct + noise_level + C(strategy) +
+(1 | model)`, with `closed_book_correct` (exact-match correctness of the same
+model/strategy/question in closed-book) as the predictor of interest; an OLS
+fit with model as a fixed effect is reported as a robustness check. Model-level
+(descriptive, n = 6): per-model robustness slope (rubric vs noise) and Spearman
+between closed-book rubric and that slope.
 
-| Term | Coefficient | p-value | FDR-significant |
-|---|---|---|---|
-| noise_level | **+0.0609** | 0.0019 | yes (q=0.007) |
-| strategy = SC | +0.0598 | 3.5e-9 | yes |
-| strategy = DA | +0.0251 | 0.013 | yes |
-| strategy = RAS | +0.0176 | 0.082 | no |
-| retriever = dense | +0.0190 | 0.125 | no |
-| retriever = hybrid | +0.0035 | 0.759 | no |
+**Result.**
 
-Model converged; AIC is reported as NaN (a cosmetic statsmodels REML artifact,
-not an error - log-likelihood is finite and the model converged).
+- **closed_book_correct: coef = +0.84, p = 2.5e-50** (mixed model) /
+  +0.84, p = 1.4e-47 (OLS, R^2 = 0.23). A correct closed-book answer predicts a
+  ~0.84-point higher RAG rubric (0-5 scale). [The mixed model's random-intercept
+  variance is singular - between-model variance is absorbed by
+  closed_book_correct - so the OLS fit is the clean estimate; both agree.]
+- noise_level: coef = -0.19, p = 0.26 (quality trends down with noise, not
+  significant at item level).
+- Model-level robustness slopes (rubric vs noise): gemma -0.45, qwen -0.59,
+  llama -0.77, deepseek -0.73, nemo +0.02, **sciphi +1.39** (outlier).
+- Spearman(closed-book rubric, robustness slope) = **-0.43, p = 0.40** (n = 6,
+  descriptive); "competent but context-fragile" models: llama, qwen.
 
-**Robustness re-run excluding SciPhi** (`--exclude-models sciphi-mistral-7b`,
-n = 120, 5 groups):
-
-| Term | Coefficient | p-value | FDR-significant |
-|---|---|---|---|
-| noise_level | **-0.0055** | 0.686 | **no** |
-| strategy = SC | +0.0658 | 1.5e-20 | yes |
-| strategy = DA | +0.0316 | 7.9e-6 | yes |
-| strategy = RAS | +0.0207 | 0.0034 | yes |
-| retriever (dense/hybrid) | ~0 | >0.9 | no |
-
-**Interpretation.** The full model shows a small **positive** noise coefficient
-(higher noise -> slightly higher score), which is counter-intuitive. The
-robustness re-run shows this is **entirely an artifact of SciPhi**: once SciPhi
-is removed, the noise coefficient collapses to ~0 and becomes non-significant
-(p = 0.69), while the prompting-strategy effects remain significant and even
-strengthen. Mechanism: SciPhi tends to continue/echo retrieved passages instead
-of answering when passages are clean (low noise), but answers more readily when
-passages are obviously junk (high noise), so its accuracy *rises* with noise -
-inflating the pooled coefficient. **Correct reading of H2:** for well-behaved
-models, retrieval noise from 0% to 60% has **no significant effect** on MCQ
-accuracy (it saturates - the closed-book-dominates result of Phase F means
-there is little to lose). **Prompting strategy is the dominant controllable
-factor**, with SC > DA > RAS, robustly across both model sets. Retriever choice
-(BM25/dense/hybrid) is non-significant throughout.
+**Interpretation.** **H2 is supported at the question level**: closed-book
+competence is a strong, highly significant predictor of RAG answer quality
+(+0.84). At the model level the relationship is descriptive (n = 6, n.s.) and
+runs in the **"competent but context-fragile"** direction the thesis
+anticipated: more competent models tend to have *more negative* robustness
+slopes (degrade more under noise), rather than a simple positive
+competence-robustness correlation. SciPhi is the outlier (slope +1.39 - rubric
+rises with noise, the documented format-collapse confound, L3). Noise lowers
+rubric quality on average (coef -0.19) but is not significant at the item level
+(and note: on the open-ended Track-B rubric noise *was* significant, Phase G).
 
 ### H3 - Are the LLM judges reliable and calibrated?
 
@@ -380,9 +381,12 @@ correctness, 10 bins); paired Wilcoxon on a 200-question perturbation audit
 
 **Result.**
 
-- Inter-rater reliability **alpha = 0.716** (n = 4320) - substantial.
-- alpha(a,b,c) = 0.716 (judge_c not run).
-- **ECE = 0.202** (n = 3120 MCQ) - moderate overconfidence.
+- Inter-rater reliability **alpha = 0.716** (n = 4320) - within the thesis's
+  predicted 0.40-0.80 band and below near-perfect (< 0.85). H3(b) specifies a
+  three-judge panel; the three-way alpha(a,b,c) is pending judge_c (currently
+  equals the pairwise value).
+- **ECE = 0.202** (n = 3120 MCQ) - moderate overconfidence (> 0.05 as H3(c)
+  predicts).
 - **Perturbation Wilcoxon** (200-question audit, all 6 models, da, both judges,
   1200 paired ratings per class):
   - class 1 (surface: typos/whitespace): rubric 3.54 -> 3.50, delta = **-0.04**,
@@ -401,6 +405,31 @@ p < 0.05 because of the large sample - i.e. the panel is **robust to surface
 noise and appropriately sensitive to meaning changes**. (Class 2 uses
 rule-based negation, a transparent approximation of a full LLM entity-swap
 protocol.)
+
+### 3S - Supplementary accuracy-based analyses
+
+These use Exact Match (not the rubric) and address questions adjacent to, but
+distinct from, the thesis hypotheses. They are retained as exploratory /
+robustness results (`run_statistics.py`).
+
+- **Model-size scaling.** Per (model, strategy) RAG improvement = mean RAG EM -
+  closed-book EM. Pearson r(size, improvement) = 0.17 (p = 0.74), Kendall tau =
+  0.14 (p = 0.70), Steiger z = -0.59 (p = 0.56); corr(size, closed-book) = 0.62
+  vs corr(size, RAG) = 0.35; all six RAG deltas negative; none survive FDR.
+  Reading: RAG uniformly lowers MCQ accuracy and the deficit does not scale with
+  model size (cf. the retrieval domain-mismatch mechanism in Phase F).
+- **Accuracy-based noise model.** Mixed model `EM ~ noise_level + C(strategy) +
+  C(retriever) + (1 | model)` (n = 144): noise_level +0.061 (p = 0.002,
+  FDR-sig), SC +0.060 (p = 3.5e-9), DA +0.025 (p = 0.013), retriever n.s. The
+  positive noise coefficient is a **SciPhi artifact**: excluding SciPhi
+  (n = 120) gives noise_level -0.006 (p = 0.69, n.s.) while strategy effects
+  persist (SC +0.066, p = 1.5e-20). Reading: for well-behaved models retrieval
+  noise has no significant effect on MCQ *accuracy*; prompting strategy
+  (SC > DA > RAS) is the dominant controllable factor; retriever choice is n.s.
+  (Note the contrast with the rubric-based H2/Track-B, where noise *does* lower
+  open-ended quality - EM accuracy masks what the rubric detects.)
+- **RAG-penalty decomposition** (EM vs EM_parsed) and **Track-B QASPER rubric
+  table**: see Phase F and Phase G.
 
 ---
 
@@ -527,6 +556,8 @@ datasets 3.0.2.
       --rag-summary outputs/rag_main/summary_table.json \
       --output outputs/chapter5_tables_nosciphi
   python scripts/qasper_track_b_table.py
+  python scripts/analyze_h1_metric_alignment.py      # thesis H1 (rubric vs lexical)
+  python scripts/analyze_h2_competence_robustness.py # thesis H2 (competence->quality)
   python scripts/audit_experiments.py        # integrity audit (expect 0 FAIL)
   python scripts/validate_results.py         # independent cross-check
   ```
@@ -549,18 +580,22 @@ remaining optional item, which does **not** block the thesis:
 
 ## 8. One-paragraph results summary (abstract-ready)
 
-We evaluated six open-weight LLMs (3-12B) on scientific multiple-choice and
-open-ended QA in closed-book and retrieval-augmented settings, across four
+We evaluated six open-weight LLMs (3-12B) on scientific QA (SciKnowEval; QASPER
+transfer track) in closed-book and retrieval-augmented settings, across four
 prompting strategies, three retrievers, and four retrieval-noise levels
-(0-60%), with a two-judge LLM panel for quality, faithfulness, and calibration.
-Retrieval-augmented generation consistently **underperformed** closed-book
-accuracy on multiple-choice science questions (mean delta -0.07; all six models
-negative), and this gap did **not** scale with model size (Pearson r = 0.17,
-n.s.). Prompting strategy was the dominant controllable factor, with
-Self-Consistency best (mixed-effects beta = +0.066, p < 1e-19); retriever choice
-was non-significant. Retrieval noise had no significant effect on well-behaved
-models once a science-tuned outlier with documented format collapse was
-excluded (noise beta = -0.006, p = 0.69). The judge panel was reliable
-(Krippendorff's alpha = 0.72, n = 4320) with moderate calibration (ECE = 0.20).
-All findings are FDR-corrected and supported by an automated integrity audit
-over 533,304 inference records.
+(0-60%), with an LLM-judge panel scoring a domain-aware rubric. **(H1)** The
+rubric aligned with reference correctness significantly better than lexical
+metrics (point-biserial r = 0.67 vs ROUGE-L 0.53, BLEU-4 0.39; Williams test
+p < 1e-4), and rubric-based strategy rankings diverged from lexical ones
+(Kendall tau 0.33-0.67). **(H2)** Closed-book competence strongly predicted RAG
+answer quality (mixed-effects/OLS coefficient +0.84, p < 1e-46); at the model
+level more competent models tended to be **more** noise-fragile ("competent but
+context-fragile", Spearman -0.43, n.s. at n = 6). **(H3)** The judge panel was
+reliable (Krippendorff's alpha = 0.72, in the predicted 0.40-0.80 band),
+moderately calibrated (ECE = 0.20), robust to surface perturbations (rubric
+delta -0.04) and sensitive to semantic ones (delta -0.33, p = 4.6e-19).
+Supplementary accuracy-based analyses show RAG underperforming closed-book on
+MCQ with no size scaling - traced to uneven cross-domain retrieval relevance
+(domain-match 8-85%) - and prompting strategy (SC > DA > RAS) as the dominant
+controllable factor. All inferential findings are FDR/Bonferroni-corrected and
+supported by an automated integrity audit over 533,304 inference records.
