@@ -189,6 +189,20 @@ for healthy models - the signature of mild distraction, not a defect. SciPhi
 degrades even on clean answers (-0.143), i.e. its reasoning, not just its
 formatting, collapses under RAG (L3).
 
+**Why RAG distracts: retrieval domain mismatch.** A domain-consistency proxy
+(`scripts/extra_checks.py`) at noise 0 measures the fraction of retrieved
+(non-noise) passages whose source-chunk domain matches the question domain:
+Biology 84.8%, Chemistry 54.8%, **Physics 37.6%, Materials 8.3%**. Where the
+match rate is low the retriever returns off-domain passages that act as
+distractors - a mechanistic explanation for the closed-book-over-RAG result,
+strongest exactly where retrieval is least on-topic (Materials, Physics).
+Computer-Science questions have no matching corpus domain at all (the corpus
+covers biology/chemistry/physics/materials/earth-science), so CS retrieval is
+inherently off-domain - consistent with CS being the lowest-rubric domain in
+the judge panel (2.14). This reframes the H1 finding: RAG does not hurt because
+"retrieval is useless", but because retrieval relevance is uneven across
+scientific domains on this corpus.
+
 ### Phase G - QASPER (Track B, appendix)
 
 **How.** 48 cells (hybrid retriever only, noise {0%, 60%}) over 600 QASPER
@@ -399,8 +413,11 @@ A read-only audit (`scripts/audit_experiments.py`) verified all phases:
 Final audit result: **35 PASS, 4 WARN, 0 FAIL** (`outputs/audit_report.txt`).
 The 4 warnings are all benign and documented (empty-predicted rates from
 SciPhi/CTL/SC; 12 degenerate-retrieval records; 1920 QASPER judge records
-whose source join is an audit-accounting artifact, not affecting any
-statistic). Independent re-derivation (`scripts/validate_results.py`)
+(`ske-track-b-*`) that also appear under `rag_main`-keyed judge paths because
+QASPER and RAG share the `hybrid_noise0.0/0.6_*` cell filenames - this is a
+labeling overlap, not contamination: alpha pairs judge_a/judge_b on identical
+cell+qid keys, the EM-based H1/H2 use the clean inference outputs, and the
+Track-B table reads from `qasper_main`). Independent re-derivation (`scripts/validate_results.py`)
 confirmed: RAG prompts are 20x larger than closed-book (passages present);
 non-"real" passages equal 0/2/4/6 for noise 0/0.2/0.4/0.6 exactly (300/300
 records per level); the RAG penalty survives on EM_parsed for all models.
