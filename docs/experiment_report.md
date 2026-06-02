@@ -439,10 +439,14 @@ datasets 3.0.2.
   degenerate citation spam (`[2][3]...[220]`). This does not affect extracted
   answers/accuracy but depresses the judge citation/faithfulness metrics.
 - **L5 - Judge calibration / perturbation.** Inter-rater reliability is solid
-  (alpha = 0.72); ECE (0.20) indicates moderate overconfidence. The
-  surface/semantic perturbation Wilcoxon test was not conducted (no audit set)
-  and is future work. The third (proprietary) calibration judge was not run, so
-  three-way alpha equals the pairwise value.
+  (alpha = 0.72); ECE (0.20) indicates moderate overconfidence. A bounded
+  perturbation audit is supported by `scripts/generate_perturbations.py`
+  (class 1 surface = deterministic typos/whitespace; class 2 semantic =
+  rule-based stem negation, a transparent approximation of a full LLM
+  entity-swap protocol) plus `compute_wilcoxon` in `judge_aggregate.py`; run it
+  on a 200-question subset to obtain the class-1 (expected non-significant) and
+  class-2 (expected significant) Wilcoxon results. The third (proprietary)
+  calibration judge was not run, so three-way alpha equals the pairwise value.
 - **L6 - QASPER.** Track B is an appendix; 10% of questions are unanswerable;
   Exact Match is not meaningful for open-ended answers, so quality is judged by
   the rubric.
@@ -461,8 +465,11 @@ datasets 3.0.2.
   `compute_metrics.py`, `run_statistics.py`, `qasper_track_b_table.py`
   (Track-B rubric aggregation).
 - **Code (verification):** `audit_experiments.py` (integrity audit, read-only),
-  `validate_results.py` (independent H1/H2/H3 + RAG/noise re-derivation), and
-  the test suite under `tests/`.
+  `validate_results.py` (independent H1/H2/H3 + RAG/noise re-derivation),
+  `extra_checks.py` (judge/source orphan diagnosis + retrieval domain proxy),
+  `generate_perturbations.py` (H3 perturbation audit set; run via
+  `run_inference.py --split-file ... --output-dir ...`), and the test suite
+  under `tests/`.
 - **Software (exact versions, Python 3.10):** vLLM 0.6.3, transformers 4.45.2,
   torch 2.4.0+cu121, sentence-transformers 3.2.1 (BGE embeddings/reranker),
   Elasticsearch 8.15.1 (BM25), faiss-cpu 1.9.0 (dense), lm-format-enforcer

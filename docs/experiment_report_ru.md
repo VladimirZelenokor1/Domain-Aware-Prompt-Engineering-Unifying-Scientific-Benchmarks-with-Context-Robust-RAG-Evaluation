@@ -432,10 +432,14 @@ datasets 3.0.2.
   вырожденным citation-спамом (`[2][3]...[220]`). На извлечённые ответы/точность
   не влияет, но занижает judge citation/faithfulness.
 - **L5 - Калибровка/возмущения судей.** Межоценочная надёжность высокая
-  (alpha = 0.72); ECE (0.20) - умеренная переуверенность. Тест
-  surface/semantic возмущений (Wilcoxon) не проводился (нет audit-сета) - future
-  work. Третий (проприетарный) судья не запускался, поэтому трёхсторонний alpha
-  равен парному.
+  (alpha = 0.72); ECE (0.20) - умеренная переуверенность. Ограниченный аудит
+  возмущений поддержан `scripts/generate_perturbations.py` (class 1 surface =
+  детерминированные опечатки/пробелы; class 2 semantic = rule-based отрицание
+  основы вопроса, прозрачная аппроксимация полного LLM entity-swap протокола)
+  плюс `compute_wilcoxon` в `judge_aggregate.py`; запускается на субсете из 200
+  вопросов для получения class-1 (ожидаемо незначимо) и class-2 (ожидаемо
+  значимо) результатов Wilcoxon. Третий (проприетарный) судья не запускался,
+  поэтому трёхсторонний alpha равен парному.
 - **L6 - QASPER.** Track B - приложение; 10% вопросов unanswerable; Exact Match
   не информативен для open-ended, поэтому качество оценивается рубрикой.
 
@@ -454,8 +458,10 @@ datasets 3.0.2.
   `compute_metrics.py`, `run_statistics.py`, `qasper_track_b_table.py`
   (агрегация рубрики Track B).
 - **Код (верификация):** `audit_experiments.py` (аудит целостности, read-only),
-  `validate_results.py` (независимый пересчёт H1/H2/H3 + RAG/шум), тесты в
-  `tests/`.
+  `validate_results.py` (независимый пересчёт H1/H2/H3 + RAG/шум),
+  `extra_checks.py` (диагностика orphan judge/source + прокси релевантности
+  ретривала), `generate_perturbations.py` (audit-сет возмущений для H3; запуск
+  через `run_inference.py --split-file ... --output-dir ...`), тесты в `tests/`.
 - **ПО (точные версии, Python 3.10):** vLLM 0.6.3, transformers 4.45.2,
   torch 2.4.0+cu121, sentence-transformers 3.2.1 (BGE эмбеддинги/реранкер),
   Elasticsearch 8.15.1 (BM25), faiss-cpu 1.9.0 (dense), lm-format-enforcer
