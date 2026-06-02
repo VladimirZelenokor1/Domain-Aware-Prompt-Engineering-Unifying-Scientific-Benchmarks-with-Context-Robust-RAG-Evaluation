@@ -447,31 +447,59 @@ datasets 3.0.2.
 - **Конфиги (в репозитории):**
   `configs/{rag,closed_book,qasper,noise,global,judge}.yaml`.
 - **Промпты (в репозитории):** `prompts/`, `configs/judge_prompts/`.
-- **Код:** `scripts/run_inference.py`, `run_rag_inference.py`,
-  `run_rag_experiment.py`, `build_qasper_corpus.py`, `sample_qasper.py`,
-  `run_judge.py`, `judge_aggregate.py`, `compute_metrics.py`,
-  `run_statistics.py`, `audit_experiments.py`.
-- **Ключевое ПО:** vLLM (4-бит AWQ инференс), HuggingFace transformers +
-  datasets, sentence-transformers (BGE эмбеддинги/реранкер), Elasticsearch 8.15
-  (BM25), FAISS (dense), lm-format-enforcer (guided JSON судейство), statsmodels
-  (mixed-effects), krippendorff (alpha). Финальные прогоны на узле A100 80GB.
-  (Зафиксировать точные версии через `pip freeze` для приложения.)
+- **Код (инференс + ретривал):** `scripts/run_inference.py`,
+  `run_rag_inference.py`, `run_rag_experiment.py`, `build_qasper_corpus.py`,
+  `sample_qasper.py`.
+- **Код (оценка + анализ):** `run_judge.py`, `judge_aggregate.py`,
+  `compute_metrics.py`, `run_statistics.py`, `qasper_track_b_table.py`
+  (агрегация рубрики Track B).
+- **Код (верификация):** `audit_experiments.py` (аудит целостности, read-only),
+  `validate_results.py` (независимый пересчёт H1/H2/H3 + RAG/шум), тесты в
+  `tests/`.
+- **ПО (точные версии, Python 3.10):** vLLM 0.6.3, transformers 4.45.2,
+  torch 2.4.0+cu121, sentence-transformers 3.2.1 (BGE эмбеддинги/реранкер),
+  Elasticsearch 8.15.1 (BM25), faiss-cpu 1.9.0 (dense), lm-format-enforcer
+  0.10.6 (guided JSON судейство), statsmodels 0.14.6 (mixed-effects),
+  krippendorff 0.8.2 (alpha), numpy 1.26.4, scipy 1.14.1, datasets 3.0.2.
+  Полный снимок: `outputs/environment_versions.txt`; ключевой:
+  `outputs/env_key_versions.txt`. Финальные прогоны на узле NVIDIA A100 80GB.
 - **Расположение выходов:** `outputs/closed_book_main_test/`,
-  `outputs/rag_main/`, `outputs/qasper_main/`, `outputs/judge/`,
-  `outputs/chapter5_tables/`, `outputs/chapter5_tables_nosciphi/`.
+  `outputs/rag_main/`, `outputs/qasper_main/`, `outputs/judge/`
+  (+ `aggregate_stats.json`), `outputs/chapter5_tables/` (H1/H2/H3 +
+  `track_b_qasper.csv`), `outputs/chapter5_tables_nosciphi/` (H2 robustness),
+  `outputs/audit_report.txt`.
+- **Команды воспроизведения (когда данные на месте):**
+  ```bash
+  python scripts/compute_metrics.py --base-dir outputs/closed_book_main_test
+  python scripts/compute_metrics.py --base-dir outputs/rag_main
+  python scripts/judge_aggregate.py --source-dirs \
+      outputs/closed_book_main_test outputs/rag_main outputs/qasper_main
+  python scripts/run_statistics.py \
+      --closed-book-summary outputs/closed_book_main_test/summary_table.json \
+      --rag-summary outputs/rag_main/summary_table.json
+  python scripts/run_statistics.py --hypothesis H2 \
+      --exclude-models sciphi-mistral-7b \
+      --closed-book-summary outputs/closed_book_main_test/summary_table.json \
+      --rag-summary outputs/rag_main/summary_table.json \
+      --output outputs/chapter5_tables_nosciphi
+  python scripts/qasper_track_b_table.py
+  python scripts/audit_experiments.py        # аудит целостности (ждём 0 FAIL)
+  python scripts/validate_results.py         # независимая перепроверка
+  ```
 
 ---
 
-## 7. Опциональные доработки (не блокируют диплом)
+## 7. Опциональные доработки
+
+Сделано после первого черновика: таблица рубрики Track B (раздел Фаза G),
+чистый 0-FAIL rerun аудита (раздел 4), снимок версий окружения (раздел 6) и
+robustness-прогон H2 с исключением SciPhi (раздел 3). Единственный оставшийся
+опциональный пункт, который **не** блокирует диплом:
 
 1. **judge_c** (проприетарный или бесплатный OpenRouter gpt-oss-120b) на
-   калибровочном субсете -> честный трёхсторонний Krippendorff alpha(a,b,c).
-2. **Количественная таблица Track B** - агрегировать 48 готовых QASPER
-   judge-ячеек в таблицу рубрики по стратегиям / уровням шума.
-3. **Чистый rerun аудита** - перезапустить `audit_experiments.py` после фиксов
-   для 0-FAIL отчёта в приложение.
-4. **Версии окружения** - снимок `pip freeze` для приложения по
-   воспроизводимости.
+   калибровочном субсете -> честный третий независимый рейтер для
+   трёхстороннего Krippendorff alpha(a,b,c). До этого alpha(a,b,c) равен парному
+   alpha(a,b) = 0.72.
 
 ---
 

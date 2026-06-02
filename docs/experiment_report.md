@@ -454,31 +454,57 @@ datasets 3.0.2.
 - **Seed:** 42 globally; per-question noise seed = 42 + hash(question_id).
 - **Configs (committed):** `configs/{rag,closed_book,qasper,noise,global,judge}.yaml`.
 - **Prompts (committed):** `prompts/`, `configs/judge_prompts/`.
-- **Code:** `scripts/run_inference.py`, `run_rag_inference.py`,
-  `run_rag_experiment.py`, `build_qasper_corpus.py`, `sample_qasper.py`,
-  `run_judge.py`, `judge_aggregate.py`, `compute_metrics.py`,
-  `run_statistics.py`, `audit_experiments.py`.
-- **Key software:** vLLM (4-bit AWQ inference), HuggingFace transformers +
-  datasets, sentence-transformers (BGE embeddings/reranker), Elasticsearch 8.15
-  (BM25), FAISS (dense), lm-format-enforcer (guided JSON judging), statsmodels
-  (mixed-effects), krippendorff (alpha). Final runs on an A100 80GB node.
-  (Record exact versions with `pip freeze` for the appendix.)
+- **Code (inference + retrieval):** `scripts/run_inference.py`,
+  `run_rag_inference.py`, `run_rag_experiment.py`, `build_qasper_corpus.py`,
+  `sample_qasper.py`.
+- **Code (scoring + analysis):** `run_judge.py`, `judge_aggregate.py`,
+  `compute_metrics.py`, `run_statistics.py`, `qasper_track_b_table.py`
+  (Track-B rubric aggregation).
+- **Code (verification):** `audit_experiments.py` (integrity audit, read-only),
+  `validate_results.py` (independent H1/H2/H3 + RAG/noise re-derivation), and
+  the test suite under `tests/`.
+- **Software (exact versions, Python 3.10):** vLLM 0.6.3, transformers 4.45.2,
+  torch 2.4.0+cu121, sentence-transformers 3.2.1 (BGE embeddings/reranker),
+  Elasticsearch 8.15.1 (BM25), faiss-cpu 1.9.0 (dense), lm-format-enforcer
+  0.10.6 (guided JSON judging), statsmodels 0.14.6 (mixed-effects),
+  krippendorff 0.8.2 (alpha), numpy 1.26.4, scipy 1.14.1, datasets 3.0.2.
+  Full snapshot: `outputs/environment_versions.txt`; key subset:
+  `outputs/env_key_versions.txt`. Final runs on an NVIDIA A100 80GB node.
 - **Output locations:** `outputs/closed_book_main_test/`, `outputs/rag_main/`,
-  `outputs/qasper_main/`, `outputs/judge/`, `outputs/chapter5_tables/`,
-  `outputs/chapter5_tables_nosciphi/`.
+  `outputs/qasper_main/`, `outputs/judge/` (+ `aggregate_stats.json`),
+  `outputs/chapter5_tables/` (H1/H2/H3 + `track_b_qasper.csv`),
+  `outputs/chapter5_tables_nosciphi/` (H2 robustness), `outputs/audit_report.txt`.
+- **Reproduction commands (after data is in place):**
+  ```bash
+  python scripts/compute_metrics.py --base-dir outputs/closed_book_main_test
+  python scripts/compute_metrics.py --base-dir outputs/rag_main
+  python scripts/judge_aggregate.py --source-dirs \
+      outputs/closed_book_main_test outputs/rag_main outputs/qasper_main
+  python scripts/run_statistics.py \
+      --closed-book-summary outputs/closed_book_main_test/summary_table.json \
+      --rag-summary outputs/rag_main/summary_table.json
+  python scripts/run_statistics.py --hypothesis H2 \
+      --exclude-models sciphi-mistral-7b \
+      --closed-book-summary outputs/closed_book_main_test/summary_table.json \
+      --rag-summary outputs/rag_main/summary_table.json \
+      --output outputs/chapter5_tables_nosciphi
+  python scripts/qasper_track_b_table.py
+  python scripts/audit_experiments.py        # integrity audit (expect 0 FAIL)
+  python scripts/validate_results.py         # independent cross-check
+  ```
 
 ---
 
-## 7. Optional follow-ups (do not block the thesis)
+## 7. Optional follow-ups
 
-1. **judge_c** (proprietary or free OpenRouter gpt-oss-120b) on a calibration
-   subset -> genuine three-way Krippendorff alpha(a,b,c).
-2. **Quantitative Track-B table** - aggregate the existing 48 QASPER judge cells
-   into a per-strategy / per-noise rubric table.
-3. **Clean audit rerun** - re-run `audit_experiments.py` after the fixes for a
-   0-FAIL report to include as an appendix artifact.
-4. **Environment versions** - `pip freeze` snapshot for the reproducibility
-   appendix.
+Completed since the first draft: Track-B rubric table (Section Phase G), clean
+0-FAIL audit rerun (Section 4), environment-version snapshot (Section 6), and
+the H2 SciPhi-exclusion robustness run (Section 3). The only remaining optional
+item, which does **not** block the thesis:
+
+1. **judge_c** (proprietary, or free OpenRouter gpt-oss-120b) on a calibration
+   subset -> a genuine third independent rater for three-way Krippendorff
+   alpha(a,b,c). Until then, alpha(a,b,c) equals the pairwise alpha(a,b) = 0.72.
 
 ---
 
