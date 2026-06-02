@@ -730,6 +730,8 @@ def run_cell(
     limit: int | None = None,
     mock: bool = False,
     engine: Any | None = None,
+    split_file: Path | None = None,
+    output_dir_override: Path | None = None,
 ) -> dict[str, Any]:
     """Run inference for a single model x strategy cell.
 
@@ -753,15 +755,25 @@ def run_cell(
     start_time = time.time()
     inf_config = config["inference"]
 
-    # Load dataset
-    data_path = PROJECT_ROOT / config["data"][split]
-    dataset = load_dataset(data_path, split_name=split.replace("_", "-"))
+    # Load dataset (an explicit split_file overrides the config-resolved path,
+    # e.g. for the H3 perturbation audit splits).
+    if split_file is not None:
+        data_path = split_file
+        split_name = split_file.stem.replace("_", "-")
+    else:
+        data_path = PROJECT_ROOT / config["data"][split]
+        split_name = split.replace("_", "-")
+    dataset = load_dataset(data_path, split_name=split_name)
 
     if limit is not None:
         dataset = dataset[:limit]
 
     # Check for resume
-    output_dir = PROJECT_ROOT / config["output"]["base_dir"]
+    output_dir = (
+        output_dir_override
+        if output_dir_override is not None
+        else PROJECT_ROOT / config["output"]["base_dir"]
+    )
     effective_model = model_name if not mock else "MOCK"
     output_path = get_output_path(output_dir, effective_model, strategy)
     existing = count_existing_records(output_path)
@@ -953,6 +965,18 @@ def parse_args() -> argparse.Namespace:
         help="Dataset split (default: dev)",
     )
     parser.add_argument(
+        "--split-file",
+        type=Path,
+        default=None,
+        help="Explicit dataset JSON path; overrides --split (e.g. perturbation audit).",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Override output base dir (default: config output.base_dir).",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=None,
@@ -987,6 +1011,8 @@ def main() -> None:
         split=args.split,
         limit=args.limit,
         mock=is_mock,
+        split_file=args.split_file,
+        output_dir_override=args.output_dir,
     )
 
     logger.info("Summary: %s", json.dumps(summary, indent=2))
