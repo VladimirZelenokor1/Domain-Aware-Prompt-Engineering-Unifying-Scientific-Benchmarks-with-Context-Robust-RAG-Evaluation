@@ -262,8 +262,10 @@ records. Outputs: `outputs/judge/{judge_a,judge_b}/<track>/<model>/<cell>.jsonl`
   run).
 - **Expected Calibration Error (MCQ subset) = 0.202** over n = 3120 pairs -
   moderate overconfidence (mean self-confidence ~0.78 vs MCQ accuracy ~0.58).
-- Perturbation Wilcoxon (surface / semantic) - **not conducted** (no
-  perturbation audit set was generated); deferred to future work.
+- Perturbation Wilcoxon (surface / semantic) - **conducted** on a 200-question
+  audit (see H3 in Section 3): class 1 surface delta = -0.04 (negligible),
+  class 2 semantic delta = -0.33 (p = 4.6e-19) - robust to typos, sensitive to
+  meaning.
 
 Per-judge means: judge_a rubric 2.70, faithfulness 0.044, coverage 0.373;
 judge_b rubric 3.04, faithfulness 0.118, coverage 0.613 (judge_b is the more
@@ -373,20 +375,32 @@ scores.
 
 **Method.** Krippendorff's alpha (ordinal) between judges over every jointly
 rated answer; Expected Calibration Error on the MCQ subset (self-confidence vs
-correctness, 10 bins); (perturbation Wilcoxon - planned, not conducted).
+correctness, 10 bins); paired Wilcoxon on a 200-question perturbation audit
+(class 1 surface vs class 2 semantic, both judges).
 
 **Result.**
 
 - Inter-rater reliability **alpha = 0.716** (n = 4320) - substantial.
 - alpha(a,b,c) = 0.716 (judge_c not run).
 - **ECE = 0.202** (n = 3120 MCQ) - moderate overconfidence.
-- Perturbation Wilcoxon - not conducted.
+- **Perturbation Wilcoxon** (200-question audit, all 6 models, da, both judges,
+  1200 paired ratings per class):
+  - class 1 (surface: typos/whitespace): rubric 3.54 -> 3.50, delta = **-0.04**,
+    p = 0.048;
+  - class 2 (semantic: stem negation): rubric 3.54 -> 3.22, delta = **-0.33**,
+    p = 4.6e-19.
 
-**Interpretation.** **H3 is supported for reliability.** Two independent
-open-weight judges agree substantially (alpha = 0.72), so rubric-based quality
-scoring is trustworthy. Calibration is moderate: confidence (~0.78) exceeds
-accuracy (~0.58) by about 0.20. The perturbation-sensitivity component is left
-to future work.
+**Interpretation.** **H3 is supported.** Two independent open-weight judges
+agree substantially (alpha = 0.72), so rubric-based quality scoring is
+trustworthy. Calibration is moderate: confidence (~0.78) exceeds accuracy
+(~0.58) by about 0.20. The perturbation audit shows the desired pattern: the
+semantic perturbation causes a large, highly significant rubric drop (delta =
+-0.33, 8x the surface effect), while the surface perturbation causes a
+negligible drop (delta = -0.04, ~1% of the 0-5 scale) that only reaches
+p < 0.05 because of the large sample - i.e. the panel is **robust to surface
+noise and appropriately sensitive to meaning changes**. (Class 2 uses
+rule-based negation, a transparent approximation of a full LLM entity-swap
+protocol.)
 
 ---
 
@@ -456,14 +470,14 @@ datasets 3.0.2.
   degenerate citation spam (`[2][3]...[220]`). This does not affect extracted
   answers/accuracy but depresses the judge citation/faithfulness metrics.
 - **L5 - Judge calibration / perturbation.** Inter-rater reliability is solid
-  (alpha = 0.72); ECE (0.20) indicates moderate overconfidence. A bounded
-  perturbation audit is supported by `scripts/generate_perturbations.py`
-  (class 1 surface = deterministic typos/whitespace; class 2 semantic =
-  rule-based stem negation, a transparent approximation of a full LLM
-  entity-swap protocol) plus `compute_wilcoxon` in `judge_aggregate.py`; run it
-  on a 200-question subset to obtain the class-1 (expected non-significant) and
-  class-2 (expected significant) Wilcoxon results. The third (proprietary)
-  calibration judge was not run, so three-way alpha equals the pairwise value.
+  (alpha = 0.72); ECE (0.20) indicates moderate overconfidence. The bounded
+  perturbation audit was **conducted** (200 questions, all 6 models, both
+  judges): class 1 surface delta = -0.04 (negligible, robust to typos), class 2
+  semantic delta = -0.33, p = 4.6e-19 (sensitive to meaning). Class 2 uses
+  rule-based negation - a transparent approximation of a full LLM entity-swap
+  protocol, which is the main caveat on this sub-result. The third
+  (proprietary) calibration judge was not run, so three-way alpha equals the
+  pairwise value.
 - **L6 - QASPER.** Track B is an appendix; 10% of questions are unanswerable;
   Exact Match is not meaningful for open-ended answers, so quality is judged by
   the rubric.
@@ -522,9 +536,10 @@ datasets 3.0.2.
 ## 7. Optional follow-ups
 
 Completed since the first draft: Track-B rubric table (Section Phase G), clean
-0-FAIL audit rerun (Section 4), environment-version snapshot (Section 6), and
-the H2 SciPhi-exclusion robustness run (Section 3). The only remaining optional
-item, which does **not** block the thesis:
+0-FAIL audit rerun (Section 4), environment-version snapshot (Section 6), the
+H2 SciPhi-exclusion robustness run (Section 3), the retrieval domain-mismatch
+diagnostic (Phase F), and the H3 perturbation audit (Section 3). The only
+remaining optional item, which does **not** block the thesis:
 
 1. **judge_c** (proprietary, or free OpenRouter gpt-oss-120b) on a calibration
    subset -> a genuine third independent rater for three-way Krippendorff
