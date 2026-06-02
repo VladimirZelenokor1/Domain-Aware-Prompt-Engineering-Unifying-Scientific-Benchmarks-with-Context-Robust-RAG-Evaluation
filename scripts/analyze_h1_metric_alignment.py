@@ -168,6 +168,11 @@ def main() -> None:
                 "correct": c["correct"],
                 "rouge": _rouge_l(c["answer_text"], c["gold"]),
                 "bleu": _bleu(c["answer_text"], c["gold"]),
+                # exact-match lexical metric = string equality of answer text vs
+                # gold text (distinct from the type-aware correctness label)
+                "em": 1.0
+                if c["answer_text"].strip().lower() == str(c["gold"]).strip().lower()
+                else 0.0,
                 "strategy": k[1],
             }
         )
@@ -180,10 +185,12 @@ def main() -> None:
     rouge = np.array([r["rouge"] for r in sub])
     bleu = np.array([r["bleu"] for r in sub])
 
+    em = np.array([r["em"] for r in sub])
+
     r_rub = point_biserial(rub, correct)
     print(f"  r_pb(rubric,  correct) = {r_rub:.3f}")
-    n_cmp = 2  # rubric vs {rouge, bleu}
-    for name, arr in (("rouge_l", rouge), ("bleu_4", bleu)):
+    n_cmp = 3  # rubric vs {rouge, bleu, exact_match} (thesis: Bonferroni /3)
+    for name, arr in (("rouge_l", rouge), ("bleu_4", bleu), ("exact_match", em)):
         r_lex = point_biserial(arr, correct)
         r_kh = float(np.corrcoef(rub, arr)[0, 1])
         t, p = williams_test(r_rub, r_lex, r_kh, len(sub))
@@ -208,19 +215,20 @@ def main() -> None:
         }
         return [s for s, _ in sorted(means.items(), key=lambda kv: -kv[1])]
 
-    rub_rank = rank_by("rubric")
-    print(f"  rubric ranking: {rub_rank}")
-    order = {s: i for i, s in enumerate(rub_rank)}
-    for name in ("rouge", "bleu"):
-        lex_rank = rank_by(name)
-        if len(lex_rank) == len(rub_rank) and len(rub_rank) > 1:
+    ranks = {m: rank_by(m) for m in ("rubric", "rouge", "bleu", "em")}
+    for m, rk in ranks.items():
+        print(f"  {m:6s} ranking: {rk}")
+    # all pairwise Kendall tau between metric-induced rankings
+    pos = {m: {s: i for i, s in enumerate(rk)} for m, rk in ranks.items()}
+    metrics = [m for m in ranks if len(ranks[m]) == len(ranks["rubric"]) > 1]
+    print("  pairwise Kendall tau:")
+    for i, a in enumerate(metrics):
+        for b in metrics[i + 1 :]:
+            common = ranks["rubric"]
             tau = kendalltau(
-                [order[s] for s in rub_rank],
-                [order[s] for s in lex_rank],
+                [pos[a][s] for s in common], [pos[b][s] for s in common]
             ).statistic
-            print(
-                f"  {name:6s} ranking: {lex_rank}  | Kendall tau vs rubric = {tau:.3f}"
-            )
+            print(f"    {a:6s} vs {b:6s}: tau = {tau:.3f}")
 
 
 if __name__ == "__main__":
