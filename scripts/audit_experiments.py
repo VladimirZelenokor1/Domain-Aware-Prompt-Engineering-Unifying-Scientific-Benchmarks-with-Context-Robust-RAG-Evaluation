@@ -368,6 +368,49 @@ def audit_cross_phase(source_qids: dict[str, set[str]]) -> None:
     )
 
 
+def audit_rag_penalty(outputs_root: Path) -> None:
+    """Decompose the RAG accuracy penalty into distraction vs format.
+
+    Compares closed-book and RAG per model on raw Exact Match (unparsed =
+    wrong) and EM_parsed (parsed answers only). A penalty that persists on
+    EM_parsed is genuine knowledge distraction, not a parsing artifact.
+    """
+    cb_path = outputs_root / "closed_book_main_test" / "summary_table.json"
+    rag_path = outputs_root / "rag_main" / "summary_table.json"
+    if not cb_path.exists() or not rag_path.exists():
+        record("WARN", "rag-penalty: closed-book or RAG summary_table.json missing")
+        return
+    with cb_path.open(encoding="utf-8") as fh:
+        cb = {(r["model"], r["strategy"]): r for r in json.load(fh)}
+    with rag_path.open(encoding="utf-8") as fh:
+        rag_rows = json.load(fh)
+
+    by_model: dict[str, list[dict]] = {}
+    for r in rag_rows:
+        by_model.setdefault(r["model"], []).append(r)
+
+    print("  model                     dEM(all)  dEM_parsed")
+    all_parsed_negative = True
+    for model, rows in sorted(by_model.items()):
+        strategies = {r["strategy"] for r in rows}
+        cb_cells = [cb[(model, s)] for s in strategies if (model, s) in cb]
+        if not cb_cells:
+            continue
+        rag_em = sum(r["exact_match"] for r in rows) / len(rows)
+        cb_em = sum(r["exact_match"] for r in cb_cells) / len(cb_cells)
+        rag_emp = sum(r["em_parsed"] for r in rows) / len(rows)
+        cb_emp = sum(r["em_parsed"] for r in cb_cells) / len(cb_cells)
+        d_em = rag_em - cb_em
+        d_emp = rag_emp - cb_emp
+        all_parsed_negative = all_parsed_negative and d_emp < 0
+        print(f"  {model:24} {d_em:+8.3f}  {d_emp:+8.3f}")
+    record(
+        "PASS",
+        "rag-penalty: EM_parsed delta negative for all models "
+        f"({'distraction is real, not a parsing artifact' if all_parsed_negative else 'mixed'})",
+    )
+
+
 def main() -> int:
     """Run the full audit and return a process exit code."""
     parser = argparse.ArgumentParser(
@@ -393,6 +436,9 @@ def main() -> int:
 
     print("\n--- cross-phase ---")
     audit_cross_phase(source_qids)
+
+    print("\n--- rag penalty (EM vs EM_parsed) ---")
+    audit_rag_penalty(root)
 
     # --- summary -------------------------------------------------------------
     levels = Counter(level for level, _ in _REPORT)
