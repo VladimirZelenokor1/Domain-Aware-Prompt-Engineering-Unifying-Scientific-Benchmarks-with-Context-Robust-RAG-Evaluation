@@ -124,10 +124,29 @@ def main() -> None:
         print(
             "\n[H2.1] mixed model: rubric ~ closed_book_correct + noise_level + C(strategy) + (1|model)"
         )
-        for term in res.params.index:
+        for term in ("closed_book_correct", "noise_level"):
+            if term in res.params.index:
+                print(
+                    f"  {term:24s} coef={res.params[term]:+.4f}  p={res.pvalues[term]:.4g}"
+                )
+        gv = float(res.cov_re.iloc[0, 0]) if res.cov_re.size else float("nan")
+        if gv < 1e-6:
             print(
-                f"  {term:28s} coef={res.params[term]:+.4f}  p={res.pvalues[term]:.4g}"
+                f"  (random-effect variance singular: {gv:.2e} - model differences "
+                "absorbed by closed_book_correct; see OLS below for clean estimates)"
             )
+
+        # OLS with model as a fixed effect - well-defined when the random
+        # intercept is singular; the trustworthy estimate for the report.
+        ols = smf.ols(
+            "rubric ~ closed_book_correct + noise_level + C(strategy) + C(model)", df
+        ).fit()
+        print("\n[H2.1b] OLS (model as fixed effect) - robustness check:")
+        for term in ("closed_book_correct", "noise_level"):
+            print(
+                f"  {term:24s} coef={ols.params[term]:+.4f}  p={ols.pvalues[term]:.4g}"
+            )
+        print(f"  R^2 = {ols.rsquared:.3f}  n = {int(ols.nobs)}")
     except ImportError:
         print("\n[H2.1] statsmodels/pandas not installed - skip mixed model")
 
