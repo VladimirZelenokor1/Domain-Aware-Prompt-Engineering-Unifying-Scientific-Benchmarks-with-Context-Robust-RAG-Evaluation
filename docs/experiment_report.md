@@ -556,8 +556,10 @@ datasets 3.0.2.
       --rag-summary outputs/rag_main/summary_table.json \
       --output outputs/chapter5_tables_nosciphi
   python scripts/qasper_track_b_table.py
-  python scripts/analyze_h1_metric_alignment.py      # thesis H1 (rubric vs lexical)
-  python scripts/analyze_h2_competence_robustness.py # thesis H2 (competence->quality)
+  python scripts/analyze_h1_metric_alignment.py      # thesis H1 (rubric vs ROUGE/BLEU/EM)
+  python scripts/analyze_h2_competence_robustness.py # thesis H2 (competence->quality, eq-12 drop)
+  python scripts/analyze_h3_reliability.py           # thesis H3 (per-judge ECE, alpha CI, Cliff's d)
+  python scripts/compute_acu_dr.py --limit-per-cell 20  # ACU + Denoise Rate (NLI; needs GPU)
   python scripts/audit_experiments.py        # integrity audit (expect 0 FAIL)
   python scripts/validate_results.py         # independent cross-check
   ```
