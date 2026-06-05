@@ -305,10 +305,15 @@ BLEU-4); and on the open-ended subset, the strategy ranking by rubric differs
 from the ranking by lexical metrics. Script: `analyze_h1_metric_alignment.py`.
 
 **Method.** Point-biserial r(metric, binary correctness) on the unambiguous
-subset (MCQ + true/false, n = 384), compared rubric-vs-lexical with the
-Williams test for dependent correlations (Bonferroni alpha = 0.025);
-Kendall's tau between strategy rankings on the open-ended subset
+subset (MCQ + true/false, n = 384), comparing rubric against three lexical
+metrics {ROUGE-L, BLEU-4, exact-match} via the Williams test for dependent
+overlapping correlations (a Steiger-family test; Bonferroni alpha = 0.05/3 =
+0.017); Kendall's tau between strategy rankings on the open-ended subset
 (open-ended-qa + relation-extraction, n = 96). Rubric = mean of judge_a/b.
+Note: the correctness label (y_gold) is type-aware exact match
+(`compute_exact_match`); the exact-match *competitor* is raw answer-vs-gold
+string equality - a distinct operationalisation, so the rubric-vs-EM comparison
+is partly self-referential and the primary evidence is rubric vs ROUGE-L/BLEU-4.
 
 **Result.**
 
@@ -317,13 +322,15 @@ Kendall's tau between strategy rankings on the open-ended subset
 | **rubric** | **0.674** | - |
 | ROUGE-L | 0.533 | t = 3.97, p = 8.6e-5 (rubric higher) |
 | BLEU-4 | 0.387 | t = 7.45, p = 6.4e-13 (rubric higher) |
+| exact-match | 0.307 | t = 9.10, p < 1e-15 (rubric higher) |
 
-Strategy ranking (open-ended): rubric = RAS > CTL > DA > SC; vs ROUGE-L
-Kendall tau = 0.667; vs BLEU-4 tau = 0.333.
+All three comparisons are Bonferroni-significant (alpha = 0.017). Strategy
+ranking (open-ended): rubric = RAS > CTL > DA > SC; vs ROUGE-L Kendall
+tau = 0.667; vs BLEU-4 tau = 0.333; vs exact-match tau = 0.333.
 
 **Interpretation.** **H1 is supported.** The rubric correlates with gold
-correctness significantly more strongly than either lexical metric (Williams
-test, both Bonferroni-significant), confirming that domain-aware rubric scoring
+correctness significantly more strongly than every lexical metric (Williams
+test, all three Bonferroni-significant), confirming that domain-aware rubric scoring
 captures answer quality better than surface overlap. Strategy rankings by
 rubric and by lexical metrics diverge (tau < 1), so the choice of metric
 changes conclusions about prompting strategies. Caveat: the predicted

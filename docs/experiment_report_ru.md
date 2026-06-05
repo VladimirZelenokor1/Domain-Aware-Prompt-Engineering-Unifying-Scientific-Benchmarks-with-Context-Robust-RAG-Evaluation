@@ -302,10 +302,14 @@ open-ended субсете ранг стратегий по рубрике отл
 метрикам. Скрипт: `analyze_h1_metric_alignment.py`.
 
 **Метод.** Point-biserial r(метрика, бинарная правильность) на unambiguous
-субсете (MCQ + true/false, n = 384), сравнение rubric-vs-лексическая через
-Williams-тест для зависимых корреляций (Bonferroni alpha = 0.025); Kendall tau
-между рангами стратегий на open-ended субсете (n = 96). Рубрика = среднее
-judge_a/b.
+субсете (MCQ + true/false, n = 384), сравнение rubric против трёх лексических
+метрик {ROUGE-L, BLEU-4, exact-match} через Williams-тест для зависимых
+overlapping-корреляций (тест семейства Steiger; Bonferroni alpha = 0.05/3 =
+0.017); Kendall tau между рангами стратегий на open-ended субсете (n = 96).
+Рубрика = среднее judge_a/b. Примечание: метка правоты (y_gold) - type-aware
+exact match (`compute_exact_match`); EM-*конкурент* - сырое строковое равенство
+answer-vs-gold (другая операционализация), поэтому сравнение rubric-vs-EM
+полу-циркулярно, и основное свидетельство - rubric vs ROUGE-L/BLEU-4.
 
 **Результат.**
 
@@ -314,12 +318,14 @@ judge_a/b.
 | **rubric** | **0.674** | - |
 | ROUGE-L | 0.533 | t = 3.97, p = 8.6e-5 (rubric выше) |
 | BLEU-4 | 0.387 | t = 7.45, p = 6.4e-13 (rubric выше) |
+| exact-match | 0.307 | t = 9.10, p < 1e-15 (rubric выше) |
 
-Ранг стратегий (open-ended): rubric = RAS > CTL > DA > SC; vs ROUGE-L Kendall
-tau = 0.667; vs BLEU-4 tau = 0.333.
+Все три сравнения Bonferroni-значимы (alpha = 0.017). Ранг стратегий
+(open-ended): rubric = RAS > CTL > DA > SC; vs ROUGE-L Kendall tau = 0.667;
+vs BLEU-4 tau = 0.333; vs exact-match tau = 0.333.
 
 **Понимание.** **H1 подтверждается.** Рубрика коррелирует с правильностью
-значимо сильнее любой лексической метрики (Williams, обе Bonferroni-значимы) -
+значимо сильнее каждой лексической метрики (Williams, все три Bonferroni-значимы) -
 domain-aware рубрика ловит качество ответа лучше поверхностного совпадения.
 Ранги стратегий по рубрике и по лексике расходятся (tau < 1), т.е. выбор метрики
 меняет выводы о стратегиях. Оговорка: предсказание «макс. расхождение у RAS» не
