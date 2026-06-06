@@ -432,6 +432,46 @@ noise and appropriately sensitive to meaning changes**. (Caveat: Class 2 was
 operationalised as rule-based question-stem negation followed by re-inference,
 not the answer padding/truncation specified in the draft - see L5.)
 
+### 3R - RAG grounding metrics: ACU and Denoise Rate (eq. 9 / 11)
+
+**Method.** Two thesis-defined RAG metrics (Sec 3.7.2) that the main pipeline did
+not emit, computed post-hoc by `compute_acu_dr.py`:
+- **ACU (Answer-Context Utility)** = fraction of the *relevant* (real) retrieved
+  passages whose content is reflected in the answer;
+- **Denoise Rate (DR)** = 1 - fraction of the *noise* passages reflected in the
+  answer (undefined at noise 0%).
+"Reflected" = NLI entailment of the answer by the passage (premise = passage,
+hypothesis = answer, entailment >= 0.5), the same DeBERTa-v3 NLI model used for
+faithfulness. Hybrid retriever, first 20 judged records per cell (96 cells).
+Passage text is resolved at 100% (376/376 unique passages): real passages from
+`corpus/all_chunks.jsonl`, synthetic noise passages (injection `inj_*`,
+contradictory `con_*`) from the `corpus/noise` pools by `noise_id`.
+
+**Result.**
+
+| noise | 0% | 20% | 40% | 60% |
+|---|---|---|---|---|
+| **ACU** | 0.036 | 0.036 | 0.035 | 0.026 |
+| **DR**  | -    | 0.978 | 0.936 | 0.927 |
+
+- By strategy - ACU: ctl 0.038, da 0.034, ras 0.034, sc 0.027; DR: ctl 0.951,
+  da 0.939, ras 0.948, sc 0.950.
+- DR by model: qwen 0.957, nemo 0.957, gemma 0.954, llama 0.949, sciphi 0.933,
+  deepseek 0.932.
+
+**Interpretation.** **Denoise Rate is high (~0.93-0.98)**: the models almost never
+let distractor / contradiction / injection passages surface in the answer, and DR
+declines only mildly as noise rises (0.98 -> 0.93 from 20% to 60%) - the panel of
+models is robust to junk context. **ACU is very low (~0.03)**: by the strict NLI
+entailment criterion the answers reflect almost none of even the *relevant*
+passages, consistent with the low faithfulness scores (L4 citation runaway plus a
+strict entailment threshold) rather than with genuine non-use of context; ACU
+dips further at 60% noise as relevant passages are crowded out. Read together,
+the two metrics say the models are good at *ignoring* noise but the NLI metric
+registers little explicit *grounding* in retrieved text - the same signal the
+faithfulness metric gives. (ACU/DR are descriptive RAG-grounding metrics and do
+not bear on H1/H2/H3.)
+
 ### 3S - Supplementary accuracy-based analyses
 
 These use Exact Match (not the rubric) and address questions adjacent to, but
