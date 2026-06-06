@@ -153,7 +153,10 @@ def main() -> None:
         "--corpus", type=Path, default=PROJECT_ROOT / "corpus" / "all_chunks.jsonl"
     )
     parser.add_argument(
-        "--noise-dir", type=Path, default=PROJECT_ROOT / "data" / "noise"
+        # Matches build_noise.NOISE_DIR (= corpus/noise), where the pools live.
+        "--noise-dir",
+        type=Path,
+        default=PROJECT_ROOT / "corpus" / "noise",
     )
     parser.add_argument("--limit-per-cell", type=int, default=20)
     parser.add_argument(
