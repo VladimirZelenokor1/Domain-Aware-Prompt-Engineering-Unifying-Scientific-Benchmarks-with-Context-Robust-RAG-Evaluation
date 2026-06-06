@@ -414,23 +414,32 @@ correctness, 10 bins); paired Wilcoxon on a 200-question perturbation audit
   (n = 2688), judge_b **0.231** (n = 2688) - both > 0.05, so H3(c) holds for
   every judge (moderate overconfidence, stronger for judge_b).
 - **Perturbation Wilcoxon + Cliff's delta** (200-question audit, all 6 models,
-  da, both judges, 1200 paired ratings per class):
-  - class 1 (surface: typos/whitespace): rubric 3.54 -> 3.50, delta = **-0.04**,
-    p = 0.048, Cliff's delta = +0.023 (negligible);
-  - class 2 (semantic): rubric 3.54 -> 3.22, delta = **-0.33**, p = 4.6e-19,
-    Cliff's delta = +0.146 (small).
+  da, both judges, ~1200 paired ratings per class). Class 2 is run in **two**
+  operationalisations - question-level (negation + re-inference) and the draft
+  Sec 3.6.4 answer-level (the stored answer is padded / truncated and re-judged
+  on the *same* question, isolating the judge):
+  - class 1 (surface: question typos/whitespace): rubric 3.54 -> 3.50,
+    delta = **-0.04**, p = 0.048, Cliff's delta = +0.023 (negligible);
+  - class 2 (semantic, question negation): rubric 3.54 -> 3.22,
+    delta = **-0.33**, p = 4.6e-19, Cliff's delta = +0.146 (small);
+  - class 2 (semantic, **answer truncation**, Sec 3.6.4): rubric 3.54 -> 3.36,
+    delta = **-0.18**, p = 1.7e-15;
+  - class 2 (semantic, **answer padding**, Sec 3.6.4): rubric 3.54 -> 3.48,
+    delta = **-0.06**, p = 0.024.
 
 **Interpretation.** **H3 is supported.** Two independent open-weight judges
 agree substantially (alpha = 0.66, in the pre-registered 0.40-0.80 band), so
 rubric-based quality scoring is trustworthy. Both judges are moderately
 overconfident (ECE > 0.05). The perturbation audit shows the desired pattern:
-the semantic perturbation causes a large, highly significant rubric drop
-(delta = -0.33; Cliff's delta = +0.15), while the surface perturbation causes a
-negligible drop (delta = -0.04; Cliff's delta = +0.02) that only reaches
-p < 0.05 because of the large sample - i.e. the panel is **robust to surface
-noise and appropriately sensitive to meaning changes**. (Caveat: Class 2 was
-operationalised as rule-based question-stem negation followed by re-inference,
-not the answer padding/truncation specified in the draft - see L5.)
+every Class-2 semantic perturbation causes a significant rubric drop while the
+Class-1 surface perturbation is negligible (delta = -0.04; only reaches p < 0.05
+because of the large sample). Crucially, **both** Class-2 operationalisations
+agree: the question-negation variant (-0.33) and the draft Sec 3.6.4 answer-level
+variant - content truncation (-0.18, p = 1.7e-15) and filler padding (-0.06,
+p = 0.024) - all drop significantly, with content removal hitting harder than
+dilution. The panel is **robust to surface noise and appropriately sensitive to
+meaning changes**, and the conclusion holds regardless of how the semantic
+perturbation is applied.
 
 ### 3R - RAG grounding metrics: ACU and Denoise Rate (eq. 9 / 11)
 
@@ -577,16 +586,16 @@ datasets 3.0.2.
 - **L5 - Judge calibration / perturbation.** Inter-rater reliability is solid
   (alpha = 0.66, CI [0.65, 0.68]); per-judge ECE 0.10/0.23 (both > 0.05,
   moderate overconfidence). The bounded perturbation audit was **conducted**
-  (200 questions, all 6 models, both judges): class 1 surface delta = -0.04
-  (negligible, robust to typos), class 2 delta = -0.33, p = 4.6e-19 (sensitive).
-  **Caveat (perturbation protocol divergence):** the draft (§3.6.4) defines
-  Class 2 as answer **padding + truncation** re-judged on the same answer; our
-  implementation instead applied rule-based **question-stem negation followed by
-  re-inference**. This tests pipeline sensitivity rather than pure judge
-  stability and introduces a stale-gold confound; the direction (class 2 >> class
-  1) holds, but a clean re-run perturbing the stored answers (per §3.6.4) is the
-  recommended fix. The third (proprietary) calibration judge was not run, so the
-  three-way alpha equals the pairwise value.
+  (200 questions, all 6 models, both judges) in **both** Class-2
+  operationalisations: the question-level negation + re-inference variant
+  (delta = -0.33, p = 4.6e-19) **and** the draft Sec 3.6.4 answer-level variant
+  that re-judges the stored answer - truncation (delta = -0.18, p = 1.7e-15) and
+  padding (delta = -0.06, p = 0.024). All Class-2 variants drop significantly and
+  Class 1 surface is negligible (-0.04), so the robust-to-surface /
+  sensitive-to-meaning conclusion holds under both protocols (the answer-level
+  variant additionally isolates the judge from model variance). Remaining gap:
+  the third (proprietary) calibration judge was not run, so the three-way alpha
+  equals the pairwise value.
 - **L6 - QASPER.** Track B is an appendix; 10% of questions are unanswerable;
   Exact Match is not meaningful for open-ended answers, so quality is judged by
   the rubric.
@@ -651,14 +660,14 @@ datasets 3.0.2.
 Completed since the first draft: Track-B rubric table (Section Phase G), clean
 0-FAIL audit rerun (Section 4), environment-version snapshot (Section 6), the
 H2 SciPhi-exclusion robustness run (Section 3), the retrieval domain-mismatch
-diagnostic (Phase F), and the H3 perturbation audit (Section 3). The only
-remaining optional item, which does **not** block the thesis:
+diagnostic (Phase F), the ACU/Denoise-Rate RAG metrics (Section 3R), and the H3
+perturbation audit in **both** operationalisations - question negation and the
+draft Sec 3.6.4 answer padding/truncation (Section 3). The only remaining
+optional item, which does **not** block the thesis:
 
 1. **judge_c** (proprietary, or free OpenRouter gpt-oss-120b) for a genuine
    three-way Krippendorff alpha(a,b,c); until then it equals pairwise
-   alpha(a,b) = 0.68.
-2. **Perturbation re-run per §3.6.4** (answer padding/truncation re-judged on the
-   stored answers) to replace the question-negation + re-inference variant (L5).
+   alpha(a,b) = 0.66.
 
 ---
 
