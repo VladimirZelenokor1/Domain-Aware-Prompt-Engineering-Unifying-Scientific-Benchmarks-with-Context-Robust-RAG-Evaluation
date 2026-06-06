@@ -52,15 +52,25 @@ def is_grounded(
     return any(s >= threshold for s in entail_scores)
 
 
+def _norm_question(text: str) -> str:
+    """Normalise a question for joining (collapse whitespace, lowercase)."""
+    return " ".join((text or "").split()).lower()
+
+
 def load_evidence(sample_path: Path) -> dict[str, list[str]]:
-    """Map QASPER question_id to its non-empty gold evidence spans.
+    """Map a normalised QASPER question to its non-empty gold evidence spans.
+
+    Track B inference reassigns ``question_id`` positionally (``ske-track-b-*``),
+    so the sample's hash ``question_id`` does not join to the inference outputs.
+    Keying on the question *text* (preserved verbatim through inference) joins
+    robustly without assuming id space or record order.
 
     Args:
-        sample_path: Path to the QASPER sample JSON (with question_id, evidence).
+        sample_path: Path to the QASPER sample JSON (with question, evidence).
 
     Returns:
-        Mapping question_id -> list of non-blank evidence strings; questions with
-        no usable evidence are omitted.
+        Mapping normalised-question -> list of non-blank evidence strings;
+        questions with no usable evidence are omitted.
     """
     with sample_path.open(encoding="utf-8") as fh:
         rows = json.load(fh)
@@ -70,7 +80,7 @@ def load_evidence(sample_path: Path) -> dict[str, list[str]]:
             s for s in (r.get("evidence") or []) if isinstance(s, str) and s.strip()
         ]
         if spans:
-            out[r["question_id"]] = spans
+            out[_norm_question(r.get("question", ""))] = spans
     return out
 
 
@@ -147,7 +157,7 @@ def main() -> None:
         flags: list[float] = []
         for r in recs:
             ans = _answer_text(r).strip()
-            spans = evidence.get(r.get("question_id"))
+            spans = evidence.get(_norm_question(r.get("question", "")))
             if not ans:
                 skipped_no_answer += 1
                 continue

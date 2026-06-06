@@ -37,19 +37,22 @@ def test_is_grounded_custom_threshold() -> None:
     assert is_grounded([0.4], threshold=0.5) is False
 
 
-def test_load_evidence_maps_qid_to_nonempty_spans(tmp_path: Path) -> None:
+def test_load_evidence_maps_normalised_question_to_nonempty_spans(
+    tmp_path: Path,
+) -> None:
     sample = tmp_path / "sample.json"
     sample.write_text(
         json.dumps(
             [
-                {"question_id": "q1", "evidence": ["span A", "  ", "span B"]},
-                {"question_id": "q2", "evidence": []},
-                {"question_id": "q3", "evidence": ["only span"]},
+                {"question": "What  is X?", "evidence": ["span A", "  ", "span B"]},
+                {"question": "Empty one?", "evidence": []},
+                {"question": "Another Q", "evidence": ["only span"]},
             ]
         ),
         encoding="utf-8",
     )
     ev = load_evidence(sample)
-    assert ev["q1"] == ["span A", "span B"]  # blank dropped
-    assert "q2" not in ev  # no usable evidence -> absent
-    assert ev["q3"] == ["only span"]
+    # keyed by normalised question text (collapsed whitespace + lowercase)
+    assert ev["what is x?"] == ["span A", "span B"]  # blank dropped
+    assert "empty one?" not in ev  # no usable evidence -> absent
+    assert ev["another q"] == ["only span"]
