@@ -43,6 +43,10 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = _SCRIPTS_DIR.parent
 
+# Main evaluation tracks that belong in the reliability/calibration aggregate.
+# Auxiliary judge outputs under outputs/judge/ (e.g. perturb_*) are excluded.
+MAIN_TRACKS = {"closed_book_main_test", "rag_main", "qasper_main"}
+
 
 # =========================================================================
 # I/O helpers
@@ -107,6 +111,12 @@ def _load_all_judge_records(judge_dir: Path) -> list[dict]:
             continue
         # judge_dir/<judge_id>/<source_root>/<model>/<file> -> "<source_root>/<model>/<file>"
         rel_parts = jsonl_path.relative_to(judge_dir).parts[1:]
+        # Only the main evaluation tracks belong in the aggregate; skip any
+        # auxiliary judge outputs (e.g. perturb_base/class1/class2 audit sets)
+        # that also live under judge_dir, so reliability/calibration are not
+        # contaminated by the perturbation experiment.
+        if not rel_parts or rel_parts[0] not in MAIN_TRACKS:
+            continue
         cell = "/".join(rel_parts)
         for rec in read_jsonl(jsonl_path):
             rec["_cell"] = cell
