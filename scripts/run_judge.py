@@ -275,11 +275,42 @@ def build_rubric_prompt(template: str, record: dict) -> str:
     return result
 
 
+# Salvage the scored fields from a truncated/malformed rubric response. The
+# guided-JSON schema emits "rubric" first, so a response cut off mid-"rationale"
+# (e.g. a long answer that exhausts max_tokens) still carries a valid rubric
+# integer; recovering it avoids a spurious rubric=0 fallback.
+_RUBRIC_SALVAGE_RE = re.compile(r'"rubric"\s*:\s*(\d+)')
+_CONF_SALVAGE_RE = re.compile(r'"self_confidence"\s*:\s*([0-9]*\.?[0-9]+)')
+
+
+def _salvage_rubric(raw: str) -> dict | None:
+    """Recover rubric/self_confidence from a truncated rubric JSON, if present.
+
+    Args:
+        raw: Raw LLM output string (possibly truncated before the JSON closes).
+
+    Returns:
+        A rubric dict if a ``"rubric": N`` field can be read, else ``None``.
+    """
+    m = _RUBRIC_SALVAGE_RE.search(raw or "")
+    if not m:
+        return None
+    rubric = max(0, min(5, int(m.group(1))))
+    cm = _CONF_SALVAGE_RE.search(raw or "")
+    conf = max(0.0, min(1.0, float(cm.group(1)))) if cm else 0.0
+    return {
+        "rubric": rubric,
+        "rationale": f"SALVAGED_TRUNCATED: {(raw or '')[:200]}",
+        "self_confidence": conf,
+    }
+
+
 def parse_rubric_response(raw: str) -> dict:
     """Parse LLM rubric response JSON.
 
     Expected format: {"rubric": 0-5, "rationale": "...", "self_confidence": 0.0-1.0}
-    Fallback on parse failure: rubric=0, self_confidence=0.0.
+    On parse failure, salvage the rubric integer from a truncated response if
+    possible; otherwise fall back to rubric=0, self_confidence=0.0.
 
     Args:
         raw: Raw LLM output string.
@@ -291,6 +322,14 @@ def parse_rubric_response(raw: str) -> dict:
     try:
         data = json.loads(cleaned)
     except (json.JSONDecodeError, TypeError):
+        salvaged = _salvage_rubric(raw)
+        if salvaged is not None:
+            logger.warning(
+                "Rubric JSON incomplete (likely truncated); salvaged rubric=%d: %.80s",
+                salvaged["rubric"],
+                raw,
+            )
+            return salvaged
         logger.warning("Failed to parse rubric JSON, using fallback: %.100s", raw)
         return {
             "rubric": 0,
