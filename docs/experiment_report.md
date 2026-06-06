@@ -362,30 +362,37 @@ rubric and that drop, with a 10,000-resample bootstrap CI.
 
 **Result.**
 
-- **closed_book_correct: coef = +0.89, p = 1.6e-74** (mixed model) /
-  +0.89, p = 1.7e-70 (OLS, R^2 = 0.20, n = 2880). A correct closed-book answer
-  predicts a ~0.89-point higher RAG rubric (0-5 scale). [The mixed model's
+- **closed_book_correct: coef = +0.85, p = 5.5e-74** (mixed model) /
+  +0.85, p = 5.4e-70 (OLS, R^2 = 0.20, n = 2880). A correct closed-book answer
+  predicts a ~0.85-point higher RAG rubric (0-5 scale). [The mixed model's
   random-intercept variance is singular - model variance is absorbed by
   closed_book_correct - so the OLS fit is the clean estimate; both agree.]
-- **noise_level: coef = -0.26, p = 0.012 (significant)** - retrieval noise
-  significantly lowers rubric quality (note the contrast with the EM-based
-  supplementary model, where noise was non-significant: the judge rubric detects
-  degradation that exact-match accuracy masks).
-- Per-model normalised drop (eq. 12, 0%->60% on hybrid): **gemma +0.284**
-  (largest), nemo +0.082, llama +0.081, deepseek +0.032, qwen +0.023,
-  **sciphi -0.885** (rubric *rises* with noise - format-collapse confound, L3).
-- Spearman(closed-book rubric, normalised drop) = **-0.43, p = 0.40**, 95%
+- **noise_level: coef = -0.09, p = 0.37 (not significant)** - once competence
+  and strategy are controlled, retrieval noise is not a significant pooled
+  predictor of rubric quality. (The EM-based supplementary model likewise shows
+  no genuine noise penalty; an earlier "-0.26, significant" figure was an
+  artifact of incomplete judge_b coverage on the hybrid 0%/60% cells, removed by
+  the judge_b back-fill - see Section 4.)
+- Per-model normalised drop (eq. 12, 0%->60% on hybrid): **gemma +0.158**
+  (largest non-confounded), llama +0.089, nemo +0.055, deepseek +0.032,
+  qwen +0.018, **sciphi -0.543** (rubric *rises* with noise - format-collapse
+  confound, L3). Five of six models show a positive (degrading) drop, but it is
+  small and not significant in the pooled model.
+- Spearman(closed-book rubric, normalised drop) = **-0.14, p = 0.79**, 95%
   bootstrap CI [-1.0, 1.0] (n = 6, descriptive - the CI is uninformative at this
   sample size, reported only because the thesis pre-registers it).
 
-**Interpretation.** **H2 is supported at the question level**: closed-book
-competence is a strong, highly significant predictor of RAG answer quality
-(+0.89), and retrieval noise significantly degrades quality (-0.26). At the
-model level the competence-robustness relationship is only descriptive (n = 6,
-n.s., uninformative CI); SciPhi is the outlier whose rubric rises with noise
-(format-collapse confound, L3). The "competent but context-fragile" pattern is
-suggestive (e.g. the high-competence gemma shows the largest normalised drop)
-but not statistically established at n = 6.
+**Interpretation.** **H2 is partially supported.** Its primary prong holds
+strongly: closed-book competence is a highly significant predictor of RAG answer
+quality (+0.85, p ~ 1e-70). The secondary prong - that retrieval noise degrades
+rubric quality - is directionally present (5 of 6 models show a positive
+normalised drop) but is **not statistically significant** in the pooled model
+(-0.09, p = 0.37) once competence and strategy are controlled. At the model
+level the competence-robustness relationship is only descriptive (n = 6, n.s.,
+uninformative CI); SciPhi is the outlier whose rubric rises with noise
+(format-collapse confound, L3). The "competent but context-fragile" label falls
+on llama-3.2-3b (above-median competence, largest non-confounded drop) but is
+not statistically established at n = 6.
 
 ### H3 - Are the LLM judges reliable and calibrated?
 
@@ -445,8 +452,11 @@ robustness results (`run_statistics.py`).
   persist (SC +0.066, p = 1.5e-20). Reading: for well-behaved models retrieval
   noise has no significant effect on MCQ *accuracy*; prompting strategy
   (SC > DA > RAS) is the dominant controllable factor; retriever choice is n.s.
-  (Note the contrast with the rubric-based H2/Track-B, where noise *does* lower
-  open-ended quality - EM accuracy masks what the rubric detects.)
+  (Contrast with the rubric-based Track-B QASPER, where noise *does*
+  descriptively lower open-ended quality, 2.23 -> 2.05 - EM accuracy masks what
+  the rubric detects there. In the Track-A rubric model H2, noise is likewise not
+  a significant pooled predictor, so the rubric/EM gap is clearest on open-ended
+  QASPER rather than on SciKnowEval MCQ.)
 - **RAG-penalty decomposition** (EM vs EM_parsed) and **Track-B QASPER rubric
   table**: see Phase F and Phase G.
 
@@ -622,10 +632,10 @@ rubric aligned with reference correctness significantly better than lexical
 metrics (point-biserial r = 0.67 vs ROUGE-L 0.53, BLEU-4 0.39; Williams test
 p < 1e-4), and rubric-based strategy rankings diverged from lexical ones
 (Kendall tau 0.33-0.67). **(H2)** Closed-book competence strongly predicted RAG
-answer quality (mixed-effects/OLS coefficient +0.89, p < 1e-70) and retrieval
-noise significantly lowered rubric quality (-0.26, p = 0.012) - degradation the
-exact-match metric misses; the model-level competence-fragility link was only
-suggestive (Spearman -0.43, n.s. at n = 6). **(H3)** The judge panel was
+answer quality (mixed-effects/OLS coefficient +0.85, p < 1e-69); retrieval noise
+showed only a directional, non-significant rubric penalty in the pooled model
+(-0.09, p = 0.37), and the model-level competence-fragility link was only
+suggestive (Spearman -0.14, n.s. at n = 6). **(H3)** The judge panel was
 reliable (Krippendorff's alpha = 0.66, in the predicted 0.40-0.80 band),
 moderately calibrated (per-judge ECE 0.10/0.23), robust to surface perturbations
 (rubric delta -0.04) and sensitive to semantic ones (delta -0.33, p = 4.6e-19).
