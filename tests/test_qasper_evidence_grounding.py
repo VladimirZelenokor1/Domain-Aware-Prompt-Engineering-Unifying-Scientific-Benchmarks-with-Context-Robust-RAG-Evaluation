@@ -17,9 +17,14 @@ from pathlib import Path
 _SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(_SCRIPTS_DIR))
 
+import types  # noqa: E402
+
+import pytest  # noqa: E402
+
 from qasper_evidence_grounding import (  # noqa: E402
     is_grounded,
     load_evidence,
+    load_evidence_from_hf,
     load_evidence_from_raw,
 )
 
@@ -90,4 +95,37 @@ def test_load_evidence_from_raw_extracts_first_annotator_spans(tmp_path: Path) -
     ev = load_evidence_from_raw(raw)
     # first annotator only, normalised key, blanks dropped
     assert ev["what is y?"] == ["para 1", "para 2"]
+    assert "no evidence?" not in ev
+
+
+def test_load_evidence_from_hf_extracts_first_annotator_spans(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # HF columnar schema: paper["qas"] holds parallel lists; answers[i]["answer"]
+    # is a list of per-annotator annotations, each with an "evidence" list.
+    fake_ds = {
+        "test": [
+            {
+                "qas": {
+                    "question": ["What  is Z?", "No evidence?"],
+                    "answers": [
+                        {
+                            "answer": [
+                                {"evidence": ["chunk 1", " ", "chunk 2"]},
+                                {"evidence": ["second annotator"]},
+                            ]
+                        },
+                        {"answer": [{"evidence": []}]},
+                    ],
+                }
+            }
+        ]
+    }
+    fake_datasets = types.ModuleType("datasets")
+    fake_datasets.load_dataset = lambda name: fake_ds  # noqa: ARG005
+    monkeypatch.setitem(sys.modules, "datasets", fake_datasets)
+
+    ev = load_evidence_from_hf("allenai/qasper")
+    # first annotator only, normalised key, blanks dropped
+    assert ev["what is z?"] == ["chunk 1", "chunk 2"]
     assert "no evidence?" not in ev

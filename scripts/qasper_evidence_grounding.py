@@ -115,6 +115,41 @@ def load_evidence_from_raw(raw_dir: Path) -> dict[str, list[str]]:
     return out
 
 
+def load_evidence_from_hf(dataset_name: str = "allenai/qasper") -> dict[str, list[str]]:
+    """Build a normalised-question -> gold evidence map from the HF QASPER dataset.
+
+    Loads every split of ``dataset_name`` and takes the first annotator's
+    ``evidence`` per question (matching ``sample_qasper.flatten_questions`` and
+    ``split_qasper``). Covers all QASPER questions, so the evaluated Track B
+    questions join by text regardless of which sample they were drawn from.
+    Use this when no local ``raw`` dir is present but the dataset is reachable
+    (HF cache or network).
+
+    Args:
+        dataset_name: HuggingFace dataset identifier (default ``allenai/qasper``).
+
+    Returns:
+        Mapping normalised-question -> list of non-blank evidence strings;
+        questions with no usable evidence are omitted.
+    """
+    from datasets import load_dataset  # noqa: PLC0415
+
+    ds = load_dataset(dataset_name)
+    out: dict[str, list[str]] = {}
+    for split in ds:
+        for paper in ds[split]:
+            qas = paper["qas"]
+            for question, ans_obj in zip(qas["question"], qas["answers"]):
+                annotations = ans_obj.get("answer", [])
+                if not annotations:
+                    continue
+                ev = annotations[0].get("evidence", []) or []
+                spans = [s for s in ev if isinstance(s, str) and s.strip()]
+                if spans:
+                    out[_norm_question(question)] = spans
+    return out
+
+
 def _read_jsonl(path: str, limit: int | None = None) -> list[dict]:
     rows: list[dict] = []
     for i, line in enumerate(open(path, encoding="utf-8")):
@@ -167,6 +202,18 @@ def main() -> None:
         type=Path,
         default=PROJECT_ROOT / "data" / "qasper" / "raw",
     )
+    parser.add_argument(
+        "--source",
+        choices=["auto", "raw", "hf", "sample"],
+        default="auto",
+        help=(
+            "Evidence source. auto: raw-dir if present else sample. "
+            "hf: load full QASPER from HuggingFace (cache or network) - use this "
+            "when no raw dir exists and the sample does not cover the evaluated "
+            "set."
+        ),
+    )
+    parser.add_argument("--hf-dataset", default="allenai/qasper")
     parser.add_argument("--limit-per-cell", type=int, default=20)
     parser.add_argument(
         "--out",
@@ -175,9 +222,16 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if args.raw_dir.exists() and any(args.raw_dir.glob("qasper-*.json")):
+    raw_ok = args.raw_dir.exists() and any(args.raw_dir.glob("qasper-*.json"))
+    source = args.source
+    if source == "auto":
+        source = "raw" if raw_ok else "sample"
+    if source == "raw":
         evidence = load_evidence_from_raw(args.raw_dir)
         src = f"raw QASPER ({args.raw_dir})"
+    elif source == "hf":
+        evidence = load_evidence_from_hf(args.hf_dataset)
+        src = f"HF dataset ({args.hf_dataset})"
     else:
         evidence = load_evidence(args.sample)
         src = f"sample ({args.sample})"
