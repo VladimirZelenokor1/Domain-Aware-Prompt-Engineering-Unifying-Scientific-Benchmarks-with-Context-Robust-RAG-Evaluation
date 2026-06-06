@@ -40,6 +40,16 @@ PROJECT_ROOT = _SCRIPTS_DIR.parent
 RAG_CELL_RE = re.compile(r"^(bm25|dense|hybrid)_noise([0-9.]+)_(da|ras|ctl|sc)$")
 ENTAIL_THRESHOLD = 0.5
 
+# Synthetic noise pools (injection/contradictory carry a ``noise_id`` that is
+# NOT in the retrieval corpus; irrelevant distractors carry a real ``chunk_id``).
+# Their text must be resolved from these pools, otherwise the noise passages -
+# the denominator of the Denoise Rate - are dropped and DR is biased.
+_NOISE_POOLS = (
+    "irrelevant_distractors.jsonl",
+    "injection_passages.jsonl",
+    "contradictory_passages.jsonl",
+)
+
 
 def _read_jsonl(path: str, limit: int | None = None) -> list[dict]:
     rows = []
@@ -98,6 +108,41 @@ def chunk_text_map(corpus_path: Path, needed: set[str]) -> dict[str, str]:
     return out
 
 
+def noise_text_map(noise_dir: Path, needed: set[str]) -> dict[str, str]:
+    """Map noise-passage ids to their text from the synthetic noise pools.
+
+    Injection and contradictory passages are referenced in ``passages_used`` by
+    their ``noise_id`` (e.g. ``inj_*``/``con_*``), which is absent from the
+    retrieval corpus; this recovers their text so they are not dropped from the
+    Denoise Rate. Irrelevant distractors carry a real ``chunk_id`` and resolve
+    from the corpus, but are included here too for completeness.
+
+    Args:
+        noise_dir: Directory holding the noise pool JSONL files.
+        needed: Passage ids still missing after the corpus lookup.
+
+    Returns:
+        Mapping of ``id -> text`` for ids found in the pools and in ``needed``.
+    """
+    out: dict[str, str] = {}
+    if not needed:
+        return out
+    for fname in _NOISE_POOLS:
+        path = noise_dir / fname
+        if not path.exists():
+            continue
+        with path.open(encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                r = json.loads(line)
+                nid = r.get("noise_id") or r.get("chunk_id")
+                if nid in needed and nid not in out:
+                    out[nid] = r.get("text", "")
+    return out
+
+
 def main() -> None:
     """Compute ACU and DR over the (bounded) RAG subset using NLI entailment."""
     from run_judge import load_nli_model  # noqa: PLC0415
@@ -106,6 +151,9 @@ def main() -> None:
     parser.add_argument("--outputs-root", type=Path, default=PROJECT_ROOT / "outputs")
     parser.add_argument(
         "--corpus", type=Path, default=PROJECT_ROOT / "corpus" / "all_chunks.jsonl"
+    )
+    parser.add_argument(
+        "--noise-dir", type=Path, default=PROJECT_ROOT / "data" / "noise"
     )
     parser.add_argument("--limit-per-cell", type=int, default=20)
     parser.add_argument(
@@ -125,7 +173,16 @@ def main() -> None:
     }
     print(f"cells={len(cells)}  unique chunks needed={len(needed)}")
     ctext = chunk_text_map(args.corpus, needed)
-    print(f"chunk texts resolved: {len(ctext)}/{len(needed)}")
+    n_corpus = len(ctext)
+    # Resolve synthetic-noise ids (inj_*/con_*) the corpus does not contain.
+    missing = needed - set(ctext)
+    ctext.update(noise_text_map(args.noise_dir, missing))
+    n_noise = len(ctext) - n_corpus
+    print(
+        f"texts resolved: {len(ctext)}/{len(needed)} "
+        f"(corpus {n_corpus}, noise pools {n_noise}, "
+        f"unresolved {len(needed) - len(ctext)})"
+    )
 
     nli_cfg = yaml.safe_load(open(PROJECT_ROOT / "configs" / "judge.yaml")).get(
         "nli", {}
