@@ -17,7 +17,11 @@ from pathlib import Path
 _SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(_SCRIPTS_DIR))
 
-from qasper_evidence_grounding import is_grounded, load_evidence  # noqa: E402
+from qasper_evidence_grounding import (  # noqa: E402
+    is_grounded,
+    load_evidence,
+    load_evidence_from_raw,
+)
 
 
 def test_is_grounded_true_when_any_span_entails() -> None:
@@ -56,3 +60,34 @@ def test_load_evidence_maps_normalised_question_to_nonempty_spans(
     assert ev["what is x?"] == ["span A", "span B"]  # blank dropped
     assert "empty one?" not in ev  # no usable evidence -> absent
     assert ev["another q"] == ["only span"]
+
+
+def test_load_evidence_from_raw_extracts_first_annotator_spans(tmp_path: Path) -> None:
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    (raw / "qasper-test-v0.3.json").write_text(
+        json.dumps(
+            {
+                "paperX": {
+                    "qas": [
+                        {
+                            "question": "What  is Y?",
+                            "answers": [
+                                {"answer": {"evidence": ["para 1", " ", "para 2"]}},
+                                {"answer": {"evidence": ["second annotator"]}},
+                            ],
+                        },
+                        {
+                            "question": "No evidence?",
+                            "answers": [{"answer": {"evidence": []}}],
+                        },
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    ev = load_evidence_from_raw(raw)
+    # first annotator only, normalised key, blanks dropped
+    assert ev["what is y?"] == ["para 1", "para 2"]
+    assert "no evidence?" not in ev

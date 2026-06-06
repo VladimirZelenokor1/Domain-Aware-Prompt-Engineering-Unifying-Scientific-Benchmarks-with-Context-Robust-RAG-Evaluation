@@ -84,6 +84,37 @@ def load_evidence(sample_path: Path) -> dict[str, list[str]]:
     return out
 
 
+def load_evidence_from_raw(raw_dir: Path) -> dict[str, list[str]]:
+    """Build a normalised-question -> gold evidence map from raw QASPER files.
+
+    Reads every ``qasper-*-v0.3.json`` in ``raw_dir`` and takes the first
+    annotator's ``evidence`` per question (matching ``split_qasper.py``). Covers
+    all QASPER questions, so the evaluated Track B questions join by text
+    regardless of which sample they were drawn from.
+
+    Args:
+        raw_dir: Directory with the raw QASPER split JSON files.
+
+    Returns:
+        Mapping normalised-question -> list of non-blank evidence strings;
+        questions with no usable evidence are omitted.
+    """
+    out: dict[str, list[str]] = {}
+    for path in sorted(raw_dir.glob("qasper-*.json")):
+        with path.open(encoding="utf-8") as fh:
+            papers = json.load(fh)
+        for paper in papers.values():
+            for qa in paper.get("qas", []):
+                answers = qa.get("answers", [])
+                if not answers:
+                    continue
+                ev = answers[0].get("answer", {}).get("evidence", []) or []
+                spans = [s for s in ev if isinstance(s, str) and s.strip()]
+                if spans:
+                    out[_norm_question(qa.get("question", ""))] = spans
+    return out
+
+
 def _read_jsonl(path: str, limit: int | None = None) -> list[dict]:
     rows: list[dict] = []
     for i, line in enumerate(open(path, encoding="utf-8")):
@@ -128,6 +159,14 @@ def main() -> None:
     parser.add_argument(
         "--sample", type=Path, default=PROJECT_ROOT / "data" / "qasper" / "sample.json"
     )
+    parser.add_argument(
+        # Preferred evidence source: raw QASPER covers every question, so the
+        # evaluated Track B questions join by text (the 500-q sample.json does
+        # not). Falls back to --sample if the raw dir is absent.
+        "--raw-dir",
+        type=Path,
+        default=PROJECT_ROOT / "data" / "qasper" / "raw",
+    )
     parser.add_argument("--limit-per-cell", type=int, default=20)
     parser.add_argument(
         "--out",
@@ -136,8 +175,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    evidence = load_evidence(args.sample)
-    print(f"questions with gold evidence: {len(evidence)}")
+    if args.raw_dir.exists() and any(args.raw_dir.glob("qasper-*.json")):
+        evidence = load_evidence_from_raw(args.raw_dir)
+        src = f"raw QASPER ({args.raw_dir})"
+    else:
+        evidence = load_evidence(args.sample)
+        src = f"sample ({args.sample})"
+    print(f"questions with gold evidence: {len(evidence)}  [source: {src}]")
 
     cells = collect_cells(args.outputs_root / "qasper_main", args.limit_per_cell)
     if not cells:
