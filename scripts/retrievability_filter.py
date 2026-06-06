@@ -911,7 +911,7 @@ def run_recall_evaluation(
                 relaxed[method]["hits"] += 1
 
     results: dict[str, dict[str, float]] = {}
-    print("\n=== TABLE VI: Retrieval Quality (Recall@10 on dev set) ===")
+    print(f"\n=== TABLE VI: Retrieval Quality (Recall@10 on {dev_path.name}) ===")
     print(f"{'Method':<10} {'Strict':>10} {'Relaxed':>10} {'Total':>6}")
     print("-" * 40)
     for method in methods:
@@ -970,7 +970,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--eval-only",
         action="store_true",
-        help="Only run TABLE VI recall evaluation on dev set.",
+        help="Only run TABLE VI recall evaluation on the --split file "
+        "(default: main_test.json, the evaluated set; pass dev.json for the pilot).",
     )
     parser.add_argument(
         "--skip-leakage",
@@ -1021,7 +1022,11 @@ def main(argv: list[str] | None = None) -> None:
     retriever = Retriever(device=args.device)
 
     if args.eval_only:
-        run_recall_evaluation(DEV_PATH, retriever)
+        # Recall@10 uses an answer-presence proxy (reference answer in top-k),
+        # which needs only the reference answer - available on any split. Honour
+        # --split so recall can be computed on the final evaluated set, not only
+        # the dev pilot.
+        run_recall_evaluation(Path(args.split), retriever)
         return
 
     # Full pipeline
