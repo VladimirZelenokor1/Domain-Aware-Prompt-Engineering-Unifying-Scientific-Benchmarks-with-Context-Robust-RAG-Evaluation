@@ -75,7 +75,7 @@ chat-шаблона; см. ограничение L3).
 
 ### 1.5 Ретриверы (3)
 
-BM25 (Elasticsearch), dense (FAISS + BGE-эмбеддинги), hybrid (RRF из BM25+dense,
+BM25 (Pyserini/Lucene), dense (FAISS + BGE-эмбеддинги), hybrid (RRF из BM25+dense,
 затем реранкер BGE).
 
 ### 1.6 Оборудование
@@ -130,7 +130,7 @@ BM25 (Elasticsearch), dense (FAISS + BGE-эмбеддинги), hybrid (RRF из
 ### Фаза E - Корпус, индексы, ретривал (инфраструктура)
 
 **Как.** Корпус Track A нарезан на окна 256/64 токена (tiktoken). BM25-индекс в
-Elasticsearch (k1=1.2, b=0.75); dense FAISS-индекс из BGE-base-en-v1.5; hybrid =
+Pyserini/Lucene индекс (k1=1.2, b=0.75); dense FAISS-индекс из BGE-base-en-v1.5; hybrid =
 RRF (k=60) из BM25+dense, затем реранкер BGE-reranker-v2-m3. Track B (QASPER) -
 свой корпус уровня статей и индексы (90 608 векторов). Фаза - фундамент F и G;
 её корректность косвенно валидируется проверками провенанса в аудите (раздел 4).
@@ -527,7 +527,7 @@ source-папки.)
 
 Окружение (ключевые версии, `outputs/env_key_versions.txt`): vLLM 0.6.3,
 transformers 4.45.2, torch 2.4.0+cu121, sentence-transformers 3.2.1,
-faiss-cpu 1.9.0, elasticsearch 8.15.1, lm-format-enforcer 0.10.6,
+faiss-cpu 1.9.0, pyserini 0.43.0 (BM25; elasticsearch 8.15.1 установлен, но не используется), lm-format-enforcer 0.10.6,
 statsmodels 0.14.6, krippendorff 0.8.2, numpy 1.26.4, scipy 1.14.1,
 datasets 3.0.2.
 
@@ -628,7 +628,8 @@ datasets 3.0.2.
   через `run_inference.py --split-file ... --output-dir ...`), тесты в `tests/`.
 - **ПО (точные версии, Python 3.10):** vLLM 0.6.3, transformers 4.45.2,
   torch 2.4.0+cu121, sentence-transformers 3.2.1 (BGE эмбеддинги/реранкер),
-  Elasticsearch 8.15.1 (BM25), faiss-cpu 1.9.0 (dense), lm-format-enforcer
+  Pyserini 0.43.0 / Lucene (BM25; elasticsearch 8.15.1 присутствует, но не используется),
+  faiss-cpu 1.9.0 (dense), lm-format-enforcer
   0.10.6 (guided JSON судейство), statsmodels 0.14.6 (mixed-effects),
   krippendorff 0.8.2 (alpha), numpy 1.26.4, scipy 1.14.1, datasets 3.0.2.
   Полный снимок: `outputs/environment_versions.txt`; ключевой:

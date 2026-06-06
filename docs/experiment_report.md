@@ -73,7 +73,7 @@ correct chat templating; see Limitation L3).
 
 ### 1.5 Retrievers (3)
 
-BM25 (Elasticsearch), dense (FAISS + BGE embeddings), hybrid (RRF of BM25 +
+BM25 (Pyserini/Lucene), dense (FAISS + BGE embeddings), hybrid (RRF of BM25 +
 dense, then BGE reranker).
 
 ### 1.6 Hardware
@@ -129,7 +129,7 @@ strategy, consistent with the self-consistency literature.
 ### Phase E - Corpus, indices, retrieval (infrastructure)
 
 **How.** Track-A corpus chunked to 256/64-token windows (tiktoken). BM25 index
-in Elasticsearch (k1=1.2, b=0.75); dense FAISS index from BGE-base-en-v1.5;
+in a Pyserini/Lucene index (k1=1.2, b=0.75); dense FAISS index from BGE-base-en-v1.5;
 hybrid = RRF (k=60) of BM25+dense followed by BGE-reranker-v2-m3. Track-B
 (QASPER) has its own paper-level corpus and indices (90,608 vectors). This
 phase underpins Phases F and G; its correctness is validated indirectly by the
@@ -554,7 +554,7 @@ Verdict: **the experiments ran cleanly; results are representative.**
 
 Environment (key versions, `outputs/env_key_versions.txt`): vLLM 0.6.3,
 transformers 4.45.2, torch 2.4.0+cu121, sentence-transformers 3.2.1,
-faiss-cpu 1.9.0, elasticsearch 8.15.1, lm-format-enforcer 0.10.6,
+faiss-cpu 1.9.0, pyserini 0.43.0 (BM25; elasticsearch 8.15.1 installed but unused), lm-format-enforcer 0.10.6,
 statsmodels 0.14.6, krippendorff 0.8.2, numpy 1.26.4, scipy 1.14.1,
 datasets 3.0.2.
 
@@ -660,7 +660,8 @@ datasets 3.0.2.
   under `tests/`.
 - **Software (exact versions, Python 3.10):** vLLM 0.6.3, transformers 4.45.2,
   torch 2.4.0+cu121, sentence-transformers 3.2.1 (BGE embeddings/reranker),
-  Elasticsearch 8.15.1 (BM25), faiss-cpu 1.9.0 (dense), lm-format-enforcer
+  Pyserini 0.43.0 / Lucene (BM25; elasticsearch 8.15.1 present but unused),
+  faiss-cpu 1.9.0 (dense), lm-format-enforcer
   0.10.6 (guided JSON judging), statsmodels 0.14.6 (mixed-effects),
   krippendorff 0.8.2 (alpha), numpy 1.26.4, scipy 1.14.1, datasets 3.0.2.
   Full snapshot: `outputs/environment_versions.txt`; key subset:
