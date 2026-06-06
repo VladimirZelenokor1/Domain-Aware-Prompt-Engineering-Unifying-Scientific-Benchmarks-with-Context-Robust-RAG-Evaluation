@@ -31,6 +31,16 @@ PROJECT_ROOT = _SCRIPTS_DIR.parent
 QID_IDX = re.compile(r"-(\d+)$")
 SPLITS = ("perturb_base", "perturb_class1", "perturb_class2")
 
+# All perturbed splits compared against perturb_base, with a human label.
+# class1/class2 = question-level (surface typos / rule-based negation);
+# class2pad/class2trunc = draft 3.6.4 answer-level semantic-degradation.
+_COMPARISONS = {
+    "perturb_class1": "surface (class1, question typos/whitespace)",
+    "perturb_class2": "semantic-negation (class2, question negation)",
+    "perturb_class2pad": "semantic-padding (class2, draft 3.6.4 answer padding)",
+    "perturb_class2trunc": "semantic-truncation (class2, draft 3.6.4 answer truncation)",
+}
+
 
 def _rubrics(judge_root: Path, split: str) -> dict[tuple[str, str, str], list[int]]:
     """Map (model, strategy, index) -> [rubric per judge] for one split."""
@@ -72,16 +82,15 @@ def main() -> None:
         print("No base perturbation judge outputs found - run the pipeline first.")
         return
 
-    for split in ("perturb_class1", "perturb_class2"):
+    for split, cls in _COMPARISONS.items():
         pert = _mean_by_pair(_rubrics(args.judge_root, split))
         keys = sorted(set(base) & set(pert))
         if not keys:
-            print(f"{split}: no paired records")
+            print(f"{split}: no paired records (skip)")
             continue
         b = np.array([base[k] for k in keys], float)
         p = np.array([pert[k] for k in keys], float)
         res = compute_wilcoxon(b, p)
-        cls = "surface (class1)" if "class1" in split else "semantic (class2)"
         verdict = "significant" if res["significant"] else "NOT significant"
         print(
             f"{cls}: n={len(keys)} pairs  mean rubric base={b.mean():.3f} "
@@ -90,7 +99,7 @@ def main() -> None:
         )
     print(
         "expected: class1 NOT significant (robust to surface noise); "
-        "class2 significant (sensitive to meaning change)"
+        "class2 / class2pad / class2trunc significant (sensitive to meaning change)"
     )
 
 
