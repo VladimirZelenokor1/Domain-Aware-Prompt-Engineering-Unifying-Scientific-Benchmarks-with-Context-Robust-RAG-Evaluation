@@ -383,6 +383,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-tokens", type=int, default=256)
     parser.add_argument("--template", type=Path, default=DEFAULT_TEMPLATE_PATH)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument(
+        "--gpu-memory-utilization",
+        type=float,
+        default=None,
+        help="Override rag.yaml gpu_memory_utilization (lower it on a contended/shared GPU)",
+    )
+    parser.add_argument(
+        "--max-model-len",
+        type=int,
+        default=None,
+        help="Override rag.yaml max_model_len (lower shrinks the KV cache; 2048 is ample for canary)",
+    )
     parser.add_argument("--mock", action="store_true", help="Run without GPU (smoke test)")
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING"])
     args = parser.parse_args(argv)
@@ -410,6 +422,12 @@ def main(argv: list[str] | None = None) -> int:
         else:
             from run_inference import create_engine, release_engine  # noqa: PLC0415
 
+            # Diagnostic-only overrides: keep rag.yaml's experiment values intact
+            # but allow shrinking the vLLM footprint on a shared/contended GPU.
+            if args.gpu_memory_utilization is not None:
+                model_cfg = {**model_cfg, "gpu_memory_utilization": args.gpu_memory_utilization}
+            if args.max_model_len is not None:
+                model_cfg = {**model_cfg, "max_model_len": args.max_model_len}
             engine = create_engine(model_cfg, seed=args.seed)
             sampling = _create_canary_sampling(args.max_tokens, args.seed)
         try:
