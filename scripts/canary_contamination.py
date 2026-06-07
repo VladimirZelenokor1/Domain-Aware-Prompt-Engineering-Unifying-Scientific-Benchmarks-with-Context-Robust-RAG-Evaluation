@@ -31,6 +31,7 @@ import json
 import logging
 import random
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -392,6 +393,84 @@ class _MockEngine:
 
 
 # =========================================================================
+# Per-model execution
+# =========================================================================
+
+
+def _probe_models_in_process(
+    models: dict, records: list[dict], template: str, args: argparse.Namespace, mock: bool
+) -> list[dict]:
+    """Probe each model in the current process (mock, or one isolated worker).
+
+    vLLM does not reliably free GPU memory across models in a single process,
+    so the real multi-model path uses :func:`_orchestrate_subprocess` instead;
+    this in-process loop is for ``--mock`` (no GPU) and the single-model worker.
+    """
+    summaries = []
+    for model_name, model_cfg in models.items():
+        logger.info("Probing model: %s", model_name)
+        if mock:
+            engine: Any = _MockEngine()
+            sampling: Any = object()
+        else:
+            from run_inference import create_engine, release_engine  # noqa: PLC0415
+
+            # Diagnostic-only overrides: keep rag.yaml's experiment values intact
+            # but allow shrinking the vLLM footprint on a shared/contended GPU.
+            mc = dict(model_cfg)
+            if args.gpu_memory_utilization is not None:
+                mc["gpu_memory_utilization"] = args.gpu_memory_utilization
+            if args.max_model_len is not None:
+                mc["max_model_len"] = args.max_model_len
+            engine = create_engine(mc, seed=args.seed)
+            sampling = _create_canary_sampling(args.max_tokens, args.seed)
+        try:
+            scored = run_model_canary(engine, sampling, records, template, args.rouge_threshold)
+        finally:
+            if not mock:
+                release_engine(engine)
+        summaries.append(summarise_model(model_name, scored))
+    return summaries
+
+
+def _orchestrate_subprocess(models: dict, args: argparse.Namespace) -> list[dict]:
+    """Run one fresh subprocess per model so GPU memory is fully reclaimed.
+
+    Each worker loads a single model, scores it, writes its summary to a partial
+    JSON, and exits (process death frees all vLLM/torch GPU allocations). The
+    orchestrator collects and merges the partials.
+    """
+    summaries: list[dict] = []
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    for model_name in models:
+        partial = args.out.parent / f".canary_partial_{model_name}.json"
+        cmd = [
+            sys.executable, str(Path(__file__).resolve()),
+            "--worker-out", str(partial),
+            "--models", model_name,
+            "--config", str(args.config),
+            "--sciknoweval", str(args.sciknoweval),
+            "--qasper", str(args.qasper),
+            "--n", str(args.n),
+            "--seed", str(args.seed),
+            "--rouge-threshold", str(args.rouge_threshold),
+            "--max-tokens", str(args.max_tokens),
+            "--template", str(args.template),
+            "--log-level", args.log_level,
+        ]
+        if args.gpu_memory_utilization is not None:
+            cmd += ["--gpu-memory-utilization", str(args.gpu_memory_utilization)]
+        if args.max_model_len is not None:
+            cmd += ["--max-model-len", str(args.max_model_len)]
+        logger.info("Spawning isolated worker for %s", model_name)
+        subprocess.run(cmd, check=True)
+        with partial.open(encoding="utf-8") as fh:
+            summaries.extend(json.load(fh))
+        partial.unlink()
+    return summaries
+
+
+# =========================================================================
 # CLI
 # =========================================================================
 
@@ -422,46 +501,39 @@ def main(argv: list[str] | None = None) -> int:
         help="Override rag.yaml max_model_len (lower shrinks the KV cache; 2048 is ample for canary)",
     )
     parser.add_argument("--mock", action="store_true", help="Run without GPU (smoke test)")
+    parser.add_argument(
+        "--worker-out",
+        type=Path,
+        default=None,
+        help="Internal: run as a single-model worker and write its summary here",
+    )
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING"])
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=getattr(logging, args.log_level), format="%(asctime)s %(levelname)s %(message)s")
 
-    template = args.template.read_text(encoding="utf-8")
     config = yaml.safe_load(args.config.open(encoding="utf-8"))
     models = config["models"]
     if args.models:
         wanted = {m.strip() for m in args.models.split(",")}
         models = {k: v for k, v in models.items() if k in wanted}
 
-    ske_records = load_sciknoweval_sample(args.sciknoweval, args.n, args.seed)
-    qasper_records = load_qasper_sample(args.qasper, args.n, args.seed)
-    logger.info("Sampled %d SciKnowEval + %d QASPER questions", len(ske_records), len(qasper_records))
-    records = qasper_records + ske_records
-
-    summaries = []
-    for model_name, model_cfg in models.items():
-        logger.info("Probing model: %s", model_name)
-        if args.mock:
-            engine: Any = _MockEngine()
-            sampling: Any = object()
-        else:
-            from run_inference import create_engine, release_engine  # noqa: PLC0415
-
-            # Diagnostic-only overrides: keep rag.yaml's experiment values intact
-            # but allow shrinking the vLLM footprint on a shared/contended GPU.
-            if args.gpu_memory_utilization is not None:
-                model_cfg = {**model_cfg, "gpu_memory_utilization": args.gpu_memory_utilization}
-            if args.max_model_len is not None:
-                model_cfg = {**model_cfg, "max_model_len": args.max_model_len}
-            engine = create_engine(model_cfg, seed=args.seed)
-            sampling = _create_canary_sampling(args.max_tokens, args.seed)
-        try:
-            scored = run_model_canary(engine, sampling, records, template, args.rouge_threshold)
-        finally:
-            if not args.mock:
-                release_engine(engine)
-        summaries.append(summarise_model(model_name, scored))
+    # Worker / mock load the data and run in-process; the real multi-model path
+    # spawns one subprocess per model (vLLM leaks GPU memory across models).
+    if args.worker_out is not None or args.mock:
+        template = args.template.read_text(encoding="utf-8")
+        ske_records = load_sciknoweval_sample(args.sciknoweval, args.n, args.seed)
+        qasper_records = load_qasper_sample(args.qasper, args.n, args.seed)
+        logger.info("Sampled %d SciKnowEval + %d QASPER questions", len(ske_records), len(qasper_records))
+        records = qasper_records + ske_records
+        summaries = _probe_models_in_process(models, records, template, args, mock=args.mock)
+        if args.worker_out is not None:
+            args.worker_out.parent.mkdir(parents=True, exist_ok=True)
+            json.dump(summaries, args.worker_out.open("w", encoding="utf-8"), indent=2)
+            logger.info("Worker wrote %s", args.worker_out)
+            return 0
+    else:
+        summaries = _orchestrate_subprocess(models, args)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     json.dump(
