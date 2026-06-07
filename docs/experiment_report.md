@@ -626,12 +626,20 @@ datasets 3.0.2.
   and the claim-decomposition step are disjoint from the evaluated models. A
   50-item manual review of the contradictory passages accepted **90% (45/50)**
   (`build_noise contradictory-review`).
-- **L8 - Unexecuted design elements (threats to validity).** (a)
-  Data-contamination detection (canary / n-gram / Fisher) was **not** run - no
-  such artifact exists, so leakage is addressed only via the parse-loss
-  diagnostic (L1), not a contamination scan, and no questions were excluded on
-  leakage grounds; selective escalation to a third judge was also not run
-  (judge_c absent). (b) Retrieval Recall@10 on the final evaluated set
+- **L8 - Partially executed design elements (threats to validity).** (a)
+  Data-contamination detection: a canary-completion probe **was** run
+  (`canary_contamination.py`, n = 200 per dataset, seed 42) - each question is
+  truncated to its opening clause and the model is asked to reconstruct it and
+  its answer. Answer-regeneration is low across all six models (0-3%) and the
+  held-out-suffix recovery is ~0; no QASPER-vs-SciKnowEval Fisher difference
+  survives multiple-comparison correction (the one nominal hit, Qwen2.5-7B
+  p = 0.031, points to the *newer* SciKnowEval, opposite to a contamination
+  signal), so **no contamination is detected**. n-gram overlap against the
+  training corpora is infeasible (training data is closed). Corpus-leakage
+  (answer verbatim in the retrieval corpus) resolved to the parse-loss
+  diagnostic (L1), not genuine leakage, and no questions were excluded on
+  leakage grounds. Selective escalation to a third judge was not run (judge_c
+  absent). (b) Retrieval Recall@10 on the final evaluated set
   (`main_test_sampled.json`, n = 3003) is an answer-presence proxy (reference
   answer within top-10, not human relevance labels): strict 20.4% bm25 / 21.1%
   dense / 21.2% hybrid; relaxed (semantic) 89.6% / 71.3% / 100.0%. Strict is low
