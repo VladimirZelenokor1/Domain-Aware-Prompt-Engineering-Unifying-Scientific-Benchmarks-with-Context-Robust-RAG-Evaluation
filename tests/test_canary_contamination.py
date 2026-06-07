@@ -31,6 +31,7 @@ from canary_contamination import (  # noqa: E402
     build_canary_prompt,
     extract_completion_parts,
     fishers_2x2,
+    held_out_suffix,
     is_regenerated,
     run_model_canary,
     truncate_question,
@@ -87,6 +88,18 @@ def test_truncate_question_empty() -> None:
 def test_build_canary_prompt_inserts_prefix() -> None:
     template = 'Opening:\n"{prefix}"\nGo.'
     assert build_canary_prompt(template, "What is X") == 'Opening:\n"What is X"\nGo.'
+
+
+# --- held_out_suffix ---------------------------------------------------------
+
+
+def test_held_out_suffix_strips_given_prefix() -> None:
+    # the shown prefix is removed so only the hidden span is scored
+    assert held_out_suffix("What is X, exactly and why?", "What is X") == "exactly and why"
+
+
+def test_held_out_suffix_fallback_when_prefix_absent() -> None:
+    assert held_out_suffix("A totally different question?", "What is X") == "A totally different question?"
 
 
 # --- extract_completion_parts ------------------------------------------------
@@ -177,5 +190,5 @@ def test_run_model_canary_scores_with_stub_engine() -> None:
     template = '"{prefix}"'
     out = run_model_canary(engine, object(), records, template, rouge_threshold=0.75)
     assert [r["regenerated"] for r in out] == [True, False]
-    # the question-verbatim reconstruction of the first item is exact -> ~1.0
-    assert out[0]["q_verbatim"] > 0.9
+    # first item reconstructs the held-out suffix exactly -> recovery ~1.0
+    assert out[0]["suffix_recovery"] > 0.9

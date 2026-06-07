@@ -101,6 +101,28 @@ def build_canary_prompt(template: str, prefix: str) -> str:
     return template.replace("{prefix}", prefix)
 
 
+def held_out_suffix(question: str, prefix: str) -> str:
+    """Return the part of the question after the canary prefix (the hidden span).
+
+    The prefix is the text the model was shown, so scoring reconstruction on the
+    whole question gives trivial credit for echoing that prefix. Comparing only
+    the held-out suffix isolates genuine recall of unseen wording.
+
+    Args:
+        question: Full question text.
+        prefix: The opening-clause prefix the model was given.
+
+    Returns:
+        The suffix after the prefix (punctuation/space trimmed); the whole
+        question if it does not start with the prefix.
+    """
+    q = " ".join((question or "").split())
+    p = " ".join((prefix or "").split())
+    if p and q.lower().startswith(p.lower()):
+        return q[len(p):].strip(" ,.;:?!")
+    return q
+
+
 def extract_completion_parts(text: str) -> tuple[str, str]:
     """Split a model completion into (reconstructed_question, answer).
 
@@ -214,17 +236,23 @@ def run_model_canary(
 
     Returns:
         The records, each augmented with ``completion``, ``regenerated`` (bool)
-        and ``q_verbatim`` (ROUGE-L of the reconstructed question vs the full
-        question - a memorisation signal robust to answer capability).
+        and ``suffix_recovery`` (ROUGE-L of the reconstructed *held-out suffix*
+        vs the true suffix - a memorisation signal that excludes the given
+        prefix, so it is not inflated by the model echoing what it was shown).
     """
-    prompts = [
-        build_canary_prompt(template, truncate_question(r["question"]))
-        for r in records
-    ]
+    prefixes = [truncate_question(r["question"]) for r in records]
+    prompts = [build_canary_prompt(template, p) for p in prefixes]
     completions = generate_completions(engine, prompts, sampling_params)
     scored = []
-    for rec, text in zip(records, completions):
+    for rec, prefix, text in zip(records, prefixes, completions):
         q_recon, _ = extract_completion_parts(text)
+        true_suffix = held_out_suffix(rec["question"], prefix)
+        recon_suffix = held_out_suffix(q_recon, prefix) if q_recon else ""
+        recovery = (
+            round(compute_rouge_l(recon_suffix, true_suffix), 4)
+            if (recon_suffix and true_suffix)
+            else 0.0
+        )
         scored.append(
             {
                 **rec,
@@ -232,9 +260,7 @@ def run_model_canary(
                 "regenerated": is_regenerated(
                     text, rec["gold"], rec["qtype"], rouge_threshold
                 ),
-                "q_verbatim": round(compute_rouge_l(q_recon, rec["question"]), 4)
-                if q_recon
-                else 0.0,
+                "suffix_recovery": recovery,
             }
         )
     return scored
@@ -324,14 +350,14 @@ def summarise_model(model: str, scored: list[dict]) -> dict:
     s_regen, s_n, s_rate = _rate(ske)
     odds, p = fishers_2x2(q_regen, q_n, s_regen, s_n)
 
-    def _qv(recs: list[dict]) -> float:
-        vals = [r["q_verbatim"] for r in recs]
+    def _sr(recs: list[dict]) -> float:
+        vals = [r["suffix_recovery"] for r in recs]
         return round(sum(vals) / len(vals), 4) if vals else 0.0
 
     return {
         "model": model,
-        "qasper": {"regenerated": q_regen, "n": q_n, "rate": q_rate, "q_verbatim": _qv(qasper)},
-        "sciknoweval": {"regenerated": s_regen, "n": s_n, "rate": s_rate, "q_verbatim": _qv(ske)},
+        "qasper": {"regenerated": q_regen, "n": q_n, "rate": q_rate, "suffix_recovery": _sr(qasper)},
+        "sciknoweval": {"regenerated": s_regen, "n": s_n, "rate": s_rate, "suffix_recovery": _sr(ske)},
         "fisher_odds_ratio": odds,
         "fisher_p": round(p, 6),
         "significant_at_0.05": bool(p < 0.05),
@@ -459,11 +485,11 @@ def main(argv: list[str] | None = None) -> int:
             f"{('*' if s['significant_at_0.05'] else ''):>6}"
         )
     print("-" * 78)
-    print("q_verbatim (reconstructed-question ROUGE-L; less capability-confounded):")
+    print("suffix_recovery (held-out-suffix ROUGE-L; excludes the shown prefix):")
     for s in summaries:
         print(
-            f"  {s['model']:<20} QASPER={s['qasper']['q_verbatim']:.3f}  "
-            f"SciKnow={s['sciknoweval']['q_verbatim']:.3f}"
+            f"  {s['model']:<20} QASPER={s['qasper']['suffix_recovery']:.3f}  "
+            f"SciKnow={s['sciknoweval']['suffix_recovery']:.3f}"
         )
     print("=" * 78)
     return 0
