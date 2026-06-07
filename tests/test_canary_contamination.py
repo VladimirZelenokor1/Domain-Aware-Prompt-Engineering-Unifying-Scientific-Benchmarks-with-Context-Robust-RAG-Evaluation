@@ -123,9 +123,19 @@ def test_is_regenerated_high_rouge_counts_as_regenerated() -> None:
 @requires_rouge
 def test_is_regenerated_low_overlap_is_false() -> None:
     assert (
-        is_regenerated("a completely unrelated sentence", "quantum entanglement", "open-ended-qa")
+        is_regenerated(
+            "a completely unrelated sentence",
+            "quantum entanglement of particles",  # 4 words -> exercises ROUGE branch
+            "open-ended-qa",
+        )
         is False
     )
+
+
+def test_is_regenerated_short_gold_substring_does_not_false_positive() -> None:
+    # Regression: a yes/no gold must not match just because "no" appears
+    # somewhere in a longer completion (loose match is gated to >=3-word golds).
+    assert is_regenerated("there is no regeneration here", "no", "true-or-false") is False
 
 
 def test_is_regenerated_empty_is_false() -> None:

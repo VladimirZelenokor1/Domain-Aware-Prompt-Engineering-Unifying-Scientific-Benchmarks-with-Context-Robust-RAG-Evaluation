@@ -149,9 +149,12 @@ def is_regenerated(
     answer = answer or output
     if compute_exact_match(answer, gold, qtype):
         return True
-    if qtype not in MC_TYPES:
-        gold_norm = " ".join(gold.lower().split())
-        if gold_norm and gold_norm in " ".join(answer.lower().split()):
+    # Loose verbatim match (substring or ROUGE-L) only for multi-word, non-MC
+    # golds. Short answers (yes/no, single tokens, choice letters) match
+    # spuriously inside any longer text, so they are judged by exact match only.
+    gold_norm = " ".join(gold.lower().split())
+    if qtype not in MC_TYPES and len(gold_norm.split()) >= 3:
+        if gold_norm in " ".join(answer.lower().split()):
             return True
         if compute_rouge_l(answer, gold) >= rouge_threshold:
             return True
