@@ -6,8 +6,10 @@ obtained, and how to interpret them**. It is written to be lifted directly into
 Chapter 4 (Methodology) and Chapter 5 (Results) of the thesis.
 
 Status: all experiment phases (D, E, F, G, H, I) executed and verified by an
-automated integrity audit. The only optional item not run is the proprietary
-calibration judge (judge_c); its absence does not affect any primary result.
+automated integrity audit, including the higher-capacity calibration judge
+(judge_c = free gpt-oss-120b): the three-way alpha(a,b,c) = 0.665 confirms
+inter-judge reliability holds across the capability tier, and selective
+escalation to judge_c improves gold-alignment (Δr_pb = +0.122).
 
 ---
 
@@ -274,8 +276,19 @@ identical n = 4320 pairs.)
 
 - **Krippendorff's alpha (judge_a vs judge_b) = 0.664**, 95% CI [0.646, 0.681]
   over n = 4320 jointly rated answers (ordinal) - **substantial** agreement.
-- **alpha(a,b,c) = 0.664** (equals the pairwise value because judge_c was not
-  run).
+- **alpha(a,b,c) = 0.665** over the n = 1080 calibration subset jointly rated by
+  all three judges - essentially unchanged from the pairwise value, so adding a
+  higher-capacity cross-ecosystem judge (judge_c = gpt-oss-120b) does not degrade
+  reliability. Pairwise across the capability-tier boundary: **alpha(a,c) = 0.653,
+  alpha(b,c) = 0.620** - both substantial. judge_c is the strictest rater (mean
+  rubric 2.62 vs 2.96/3.36).
+- **Selective escalation to judge_c** (RQ3, role iii): escalating low-confidence
+  judge_a/b items to judge_c raises the composite's point-biserial alignment with
+  SciKnowEval gold from r_pb = 0.787 to 0.909 on a held-out half (**Δr_pb =
+  +0.122**; threshold tuned on the disjoint other half). The tuned threshold
+  escalates ~95% of items, so the gain reflects judge_c's higher individual
+  gold-alignment more than budget-efficient routing - consistent with the
+  open-weight judges' weak confidence calibration (ECE 0.10-0.23).
 - **Per-judge ECE** (MCQ/short-answer subset, B = 10): judge_a 0.103, judge_b
   0.231 - both > 0.05 (moderate overconfidence).
 - Perturbation Wilcoxon (surface / semantic) - **conducted** (see H3, Section 3):
@@ -420,7 +433,9 @@ correctness, 10 bins); paired Wilcoxon on a 200-question perturbation audit
 - Inter-rater reliability **alpha = 0.664**, 95% bootstrap CI [0.646, 0.681]
   (n = 4320 jointly rated answers) - within the thesis's predicted 0.40-0.80
   band and below near-perfect (< 0.85). H3(b) specifies a three-judge panel; the
-  three-way alpha(a,b,c) is pending judge_c (currently equals the pairwise value).
+  three-way alpha(a,b,c) = 0.665 (n = 1080) confirms agreement holds with a
+  higher-capacity cross-ecosystem judge (pairwise alpha(a,c) = 0.653,
+  alpha(b,c) = 0.620).
 - **Per-judge ECE** (B = 10, MCQ/short-answer subset): judge_a **0.103**
   (n = 2688), judge_b **0.231** (n = 2688) - both > 0.05, so H3(c) holds for
   every judge (moderate overconfidence, stronger for judge_b).
@@ -604,9 +619,10 @@ datasets 3.0.2.
   padding (delta = -0.06, p = 0.024). All Class-2 variants drop significantly and
   Class 1 surface is negligible (-0.04), so the robust-to-surface /
   sensitive-to-meaning conclusion holds under both protocols (the answer-level
-  variant additionally isolates the judge from model variance). Remaining gap:
-  the third (proprietary) calibration judge was not run, so the three-way alpha
-  equals the pairwise value.
+  variant additionally isolates the judge from model variance). The third,
+  higher-capacity calibration judge (judge_c) was run on a 1080-item subset; the
+  three-way alpha(a,b,c) = 0.665 matches the pairwise value, so agreement holds
+  across the capability tier.
 - **L6 - QASPER.** Track B is an appendix; 10% of questions are unanswerable;
   Exact Match is not meaningful for open-ended answers, so quality is judged by
   the rubric. QASPER `highlighted_evidence` spans give an automatic ground-truth
@@ -649,8 +665,10 @@ datasets 3.0.2.
   training corpora is infeasible (training data is closed). Corpus-leakage
   (answer verbatim in the retrieval corpus) resolved to the parse-loss
   diagnostic (L1), not genuine leakage, and no questions were excluded on
-  leakage grounds. Selective escalation to a third judge was not run (judge_c
-  absent). (b) Retrieval Recall@10 on the final evaluated set
+  leakage grounds. Selective escalation to the higher-capacity judge_c was run
+  (RQ3): Δr_pb = +0.122 on held-out items, though the tuned threshold escalates
+  ~95%, so the gain is largely judge_c's higher gold-alignment rather than
+  budget-efficient routing. (b) Retrieval Recall@10 on the final evaluated set
   (`main_test_sampled.json`, n = 3003) is an answer-presence proxy (reference
   answer within top-10, not human relevance labels): strict 20.4% bm25 / 21.1%
   dense / 21.2% hybrid; relaxed (semantic) 89.6% / 71.3% / 100.0%. Strict is low
@@ -721,12 +739,16 @@ Completed since the first draft: Track-B rubric table (Section Phase G), clean
 H2 SciPhi-exclusion robustness run (Section 3), the retrieval domain-mismatch
 diagnostic (Phase F), the ACU/Denoise-Rate RAG metrics (Section 3R), and the H3
 perturbation audit in **both** operationalisations - question negation and the
-draft Sec 3.6.4 answer padding/truncation (Section 3). The only remaining
-optional item, which does **not** block the thesis:
+draft Sec 3.6.4 answer padding/truncation (Section 3), and the **judge_c
+calibration run** (free gpt-oss-120b: three-way alpha(a,b,c) = 0.665, pairwise
+alpha(a,c)/(b,c) = 0.653/0.620, selective-escalation Δr_pb = +0.122). The
+remaining optional items, which do **not** block the thesis:
 
-1. **judge_c** (proprietary, or free OpenRouter gpt-oss-120b) for a genuine
-   three-way Krippendorff alpha(a,b,c); until then it equals pairwise
-   alpha(a,b) = 0.66.
+1. **Multi-annotator human validation** of the rubric: the judge-vs-human kappa
+   is currently preliminary and single-annotator; a second independent annotator
+   would convert it to established expert agreement.
+2. A **frontier proprietary judge** (GPT-4o / Claude / Gemini Pro class) as an
+   even higher-capacity calibration anchor, if budget allows.
 
 ---
 
@@ -744,7 +766,8 @@ answer quality (mixed-effects/OLS coefficient +0.85, p < 1e-69); retrieval noise
 showed only a directional, non-significant rubric penalty in the pooled model
 (-0.09, p = 0.37), and the model-level competence-fragility link was only
 suggestive (Spearman -0.14, n.s. at n = 6). **(H3)** The judge panel was
-reliable (Krippendorff's alpha = 0.66, in the predicted 0.40-0.80 band),
+reliable (Krippendorff's alpha = 0.66, in the predicted 0.40-0.80 band; the
+three-way alpha with a higher-capacity cross-ecosystem judge held at 0.665),
 moderately calibrated (per-judge ECE 0.10/0.23), robust to surface perturbations
 (rubric delta -0.04) and sensitive to semantic ones (delta -0.33, p = 4.6e-19).
 Supplementary accuracy-based analyses show RAG underperforming closed-book on
