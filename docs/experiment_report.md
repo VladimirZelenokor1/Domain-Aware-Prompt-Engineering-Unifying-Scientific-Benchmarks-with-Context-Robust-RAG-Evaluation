@@ -293,9 +293,10 @@ identical n = 4320 pairs.)
   +0.057, 50% +0.097, 100% +0.122). Neither self-confidence nor judge
   disagreement concentrates the gain in the uncertain tail, so the open-weight
   judges' uncertainty signals are **not diagnostic** of where judge_c adds value
-  (consistent with their weak calibration, ECE 0.10-0.23). judge_c is therefore
-  best used as a uniform calibration reference, not a budget-limited escalation
-  target.
+  (consistent with their weak calibration, ECE 0.10-0.23). This is not a
+  degenerate-signal artifact: self-confidence genuinely varies (std 0.215, full
+  0-1 range, n = 20636), yet still fails to route. judge_c is therefore best used
+  as a uniform calibration reference, not a budget-limited escalation target.
 - **Per-judge ECE** (MCQ/short-answer subset, B = 10): judge_a 0.103, judge_b
   0.231 - both > 0.05 (moderate overconfidence).
 - Perturbation Wilcoxon (surface / semantic) - **conducted** (see H3, Section 3):
