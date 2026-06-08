@@ -307,7 +307,7 @@ open-ended субсете ранг стратегий по рубрике отл
 метрикам. Скрипт: `analyze_h1_metric_alignment.py`.
 
 **Метод.** Point-biserial r(метрика, бинарная правильность) на unambiguous
-субсете (MCQ + true/false, n = 384), сравнение rubric против трёх лексических
+субсете (MCQ, true/false и fill-in, n = 384), сравнение rubric против трёх лексических
 метрик {ROUGE-L, BLEU-4, exact-match} через Williams-тест для зависимых
 overlapping-корреляций (тест семейства Steiger; Bonferroni alpha = 0.05/3 =
 0.017); Kendall tau между рангами стратегий на open-ended субсете (n = 96).

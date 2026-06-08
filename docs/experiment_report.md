@@ -313,7 +313,7 @@ BLEU-4); and on the open-ended subset, the strategy ranking by rubric differs
 from the ranking by lexical metrics. Script: `analyze_h1_metric_alignment.py`.
 
 **Method.** Point-biserial r(metric, binary correctness) on the unambiguous
-subset (MCQ + true/false, n = 384), comparing rubric against three lexical
+subset (MCQ, true/false, and fill-in, n = 384), comparing rubric against three lexical
 metrics {ROUGE-L, BLEU-4, exact-match} via the Williams test for dependent
 overlapping correlations (a Steiger-family test; Bonferroni alpha = 0.05/3 =
 0.017); Kendall's tau between strategy rankings on the open-ended subset
