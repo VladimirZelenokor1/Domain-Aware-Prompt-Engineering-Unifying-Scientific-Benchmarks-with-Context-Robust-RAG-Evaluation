@@ -8,8 +8,9 @@ Chapter 4 (Methodology) and Chapter 5 (Results) of the thesis.
 Status: all experiment phases (D, E, F, G, H, I) executed and verified by an
 automated integrity audit, including the higher-capacity calibration judge
 (judge_c = free gpt-oss-120b): the three-way alpha(a,b,c) = 0.665 confirms
-inter-judge reliability holds across the capability tier, and selective
-escalation to judge_c improves gold-alignment (Δr_pb = +0.122).
+inter-judge reliability holds across the capability tier, and escalation to
+judge_c improves gold-alignment by Δr_pb = +0.122 at full escalation (though not
+budget-efficiently - confidence/disagreement routing is not diagnostic; see H3).
 
 ---
 
@@ -282,13 +283,19 @@ identical n = 4320 pairs.)
   reliability. Pairwise across the capability-tier boundary: **alpha(a,c) = 0.653,
   alpha(b,c) = 0.620** - both substantial. judge_c is the strictest rater (mean
   rubric 2.62 vs 2.96/3.36).
-- **Selective escalation to judge_c** (RQ3, role iii): escalating low-confidence
-  judge_a/b items to judge_c raises the composite's point-biserial alignment with
-  SciKnowEval gold from r_pb = 0.787 to 0.909 on a held-out half (**Δr_pb =
-  +0.122**; threshold tuned on the disjoint other half). The tuned threshold
-  escalates ~95% of items, so the gain reflects judge_c's higher individual
-  gold-alignment more than budget-efficient routing - consistent with the
-  open-weight judges' weak confidence calibration (ECE 0.10-0.23).
+- **Selective escalation to judge_c** (RQ3, role iii): on a held-out half
+  (n = 420), escalating items to judge_c raises the composite's point-biserial
+  alignment with SciKnowEval gold from r_pb = 0.787 (base) to 0.909 at full
+  escalation (**Δr_pb = +0.122**). But the fixed-budget curve shows the gain is
+  **not budget-efficient**: escalating the most-uncertain 10-20% yields ≈0
+  (slightly negative: -0.010/-0.001 by confidence, -0.007/+0.012 by
+  inter-judge disagreement), and the benefit only accumulates with budget (30%
+  +0.057, 50% +0.097, 100% +0.122). Neither self-confidence nor judge
+  disagreement concentrates the gain in the uncertain tail, so the open-weight
+  judges' uncertainty signals are **not diagnostic** of where judge_c adds value
+  (consistent with their weak calibration, ECE 0.10-0.23). judge_c is therefore
+  best used as a uniform calibration reference, not a budget-limited escalation
+  target.
 - **Per-judge ECE** (MCQ/short-answer subset, B = 10): judge_a 0.103, judge_b
   0.231 - both > 0.05 (moderate overconfidence).
 - Perturbation Wilcoxon (surface / semantic) - **conducted** (see H3, Section 3):
@@ -666,9 +673,10 @@ datasets 3.0.2.
   (answer verbatim in the retrieval corpus) resolved to the parse-loss
   diagnostic (L1), not genuine leakage, and no questions were excluded on
   leakage grounds. Selective escalation to the higher-capacity judge_c was run
-  (RQ3): Δr_pb = +0.122 on held-out items, though the tuned threshold escalates
-  ~95%, so the gain is largely judge_c's higher gold-alignment rather than
-  budget-efficient routing. (b) Retrieval Recall@10 on the final evaluated set
+  (RQ3): Δr_pb = +0.122 at full escalation, but the fixed-budget curve shows no
+  budget efficiency (the most-uncertain 10-20% give ≈0), so judge_c serves as a
+  uniform calibration reference, not a budget-limited escalation target. (b)
+  Retrieval Recall@10 on the final evaluated set
   (`main_test_sampled.json`, n = 3003) is an answer-presence proxy (reference
   answer within top-10, not human relevance labels): strict 20.4% bm25 / 21.1%
   dense / 21.2% hybrid; relaxed (semantic) 89.6% / 71.3% / 100.0%. Strict is low
