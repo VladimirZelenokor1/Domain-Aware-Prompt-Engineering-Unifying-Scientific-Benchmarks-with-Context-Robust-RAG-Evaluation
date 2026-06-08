@@ -391,8 +391,10 @@ normalised drop) but is **not statistically significant** in the pooled model
 level the competence-robustness relationship is only descriptive (n = 6, n.s.,
 uninformative CI); SciPhi is the outlier whose rubric rises with noise
 (format-collapse confound, L3). The "competent but context-fragile" label falls
-on llama-3.2-3b (above-median competence, largest non-confounded drop) but is
-not statistically established at n = 6.
+on llama-3.2-3b - the only model above the median on both closed-book competence
+(rubric 3.83, the highest) and normalised drop (+0.089). gemma's larger drop
+(+0.158) does not qualify, because its closed-book competence is below median
+(3.50). The profile is not statistically established at n = 6.
 
 ### H3 - Are the LLM judges reliable and calibrated?
 
