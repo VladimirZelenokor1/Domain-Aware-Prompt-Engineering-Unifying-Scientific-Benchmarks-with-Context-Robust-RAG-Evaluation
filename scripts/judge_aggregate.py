@@ -611,10 +611,21 @@ def aggregate_judge_outputs(
         compute_krippendorff_alpha(ratings_abc) if len(ratings_abc) >= 2 else 0.0
     )
 
+    # Pairwise alpha across the open-weight / higher-capacity boundary (role ii:
+    # judge_c as a capability-tier anchor). 0.0 until judge_c has been run.
+    def _pairwise_alpha(j1: str, j2: str) -> float:
+        sub = {jid: r for jid, r in judge_ratings.items() if jid in {j1, j2}}
+        return compute_krippendorff_alpha(sub) if len(sub) >= 2 else 0.0
+
+    krippendorff_ac: float = _pairwise_alpha("judge_a", "judge_c")
+    krippendorff_bc: float = _pairwise_alpha("judge_b", "judge_c")
+
     # Number of answers jointly rated by judge_a and judge_b (the alpha unit).
     items_a = set(judge_ratings.get("judge_a", {}))
     items_b = set(judge_ratings.get("judge_b", {}))
+    items_c = set(judge_ratings.get("judge_c", {}))
     n_ab_items = len(items_a & items_b)
+    n_abc_items = len(items_a & items_b & items_c)
 
     # ECE on MCQ subset
     ece_mcq, ece_mcq_n = _compute_ece_mcq(all_judge_records, all_source_records)
@@ -636,7 +647,10 @@ def aggregate_judge_outputs(
     return {
         "krippendorff_ab": krippendorff_ab,
         "krippendorff_abc": krippendorff_abc,
+        "krippendorff_ac": krippendorff_ac,
+        "krippendorff_bc": krippendorff_bc,
         "n_ab_items": n_ab_items,
+        "n_abc_items": n_abc_items,
         "ece_mcq": ece_mcq,
         "ece_mcq_n": ece_mcq_n,
         "wilcoxon_class1": wilcoxon_class1,
