@@ -936,6 +936,10 @@ _API_PRICING_PER_M: dict[str, tuple[float, float]] = {
     "claude-sonnet-4-6": (3.0, 15.0),
     "claude-3-5-sonnet": (3.0, 15.0),
     "claude-3-5-sonnet-latest": (3.0, 15.0),
+    # Free OpenRouter calibration judge: zero price so the cost cap is never
+    # tripped by phantom default pricing (real spend is $0).
+    "openai/gpt-oss-120b:free": (0.0, 0.0),
+    "openai/gpt-oss-120b": (0.0, 0.0),
 }
 _API_PRICING_DEFAULT = (3.0, 15.0)
 

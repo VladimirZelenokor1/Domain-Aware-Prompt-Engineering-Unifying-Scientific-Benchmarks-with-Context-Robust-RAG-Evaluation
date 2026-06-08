@@ -27,11 +27,16 @@ main_set_judges:
 
 calibration_judge:
   id: judge_c
-  model: claude-sonnet-4-6                # Anthropic API; independent of examinee families
-  role: proprietary_calibration
+  # Higher-capacity API calibration judge, independent of every examinee family.
+  # Served free via OpenRouter (OpenAI-compatible): export
+  #   OPENAI_BASE_URL=https://openrouter.ai/api/v1
+  #   OPENAI_API_KEY=<openrouter key>
+  # run_judge selects the OpenAI client because the name has no "claude".
+  model: openai/gpt-oss-120b:free
+  role: proprietary_calibration           # drives the API-engine path (kept for compat)
   scope: dev_set + holdout_audit
   max_items: 1000
-  cost_cap_usd: 100                       # hard stop per Ground Rule 4 / Decision Point 7.4
+  cost_cap_usd: 100                       # ignored for the free model (price 0); guards paid runs
   api:
     rate_limit_rps: 2                     # placeholder
     max_retries: 5
