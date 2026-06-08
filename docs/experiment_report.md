@@ -225,6 +225,15 @@ Aggregating the 1920 QASPER judge records (`scripts/qasper_track_b_table.py`):
 | noise = 0% | 960 | **2.23** | 0.041 | 0.305 |
 | noise = 60% | 960 | **2.05** | 0.060 | 0.321 |
 
+Faithfulness is judge-dependent (audit A-4), so the pooled column above is split
+per judge: **judge_a 0.042, judge_b 0.059** (pooling to 0.051). The ~3x
+cross-judge faithfulness gap on the full judged set (judge_a 0.043 vs judge_b
+0.143) is driven by Track-A RAG; on QASPER both judges are low and within ~1.4x
+but still differ, consistent with each judge decomposing claims with its own
+model (L7). Faithfulness *rises* with noise (0.041 -> 0.060), opposite to the
+rubric - most likely an artifact of the larger passage pool under noise offering
+more chances for spurious NLI entailment, not better grounding.
+
 **Interpretation.** Track B is a transfer check to a second scientific QA
 format (NLP papers). Two findings stand out. (1) Unlike Track-A MCQ accuracy
 (where noise had no effect), on open-ended QASPER scored by the rubric **noise
