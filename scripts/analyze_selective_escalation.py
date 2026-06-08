@@ -127,6 +127,67 @@ def split_indices(n: int, frac: float, seed: int) -> tuple[list[int], list[int]]
     return tune, report
 
 
+def uncertainty_signal(
+    confidences: list[float | None],
+    rub_a: list[float],
+    rub_b: list[float],
+    signal: str,
+) -> list[float]:
+    """Per-item uncertainty used to rank escalation (higher = escalate first).
+
+    Args:
+        confidences: mean judge_a/b self-confidence per item (None allowed).
+        rub_a: judge_a rubric per item.
+        rub_b: judge_b rubric per item.
+        signal: "confidence" (uncertainty = -confidence) or "disagreement"
+            (uncertainty = |rubric_a - rubric_b|).
+
+    Returns:
+        Uncertainty scores; missing confidence ranks as maximally uncertain.
+    """
+    if signal == "disagreement":
+        return [abs(a - b) for a, b in zip(rub_a, rub_b)]
+    return [(-c if c is not None else float("inf")) for c in confidences]
+
+
+def budget_curve(
+    base: list[float],
+    c_scores: list[float | None],
+    uncertainty: list[float],
+    gold: list[int],
+    fractions: list[float],
+) -> list[dict]:
+    """Delta r_pb when escalating only the most-uncertain ``frac`` of items.
+
+    Models a fixed API budget: rank items by uncertainty (descending) and
+    escalate the top ``frac`` to judge_c, leaving the rest on the base composite.
+
+    Returns:
+        One row per fraction: {fraction, n_escalated, escalated_rpb, delta_rpb}.
+    """
+    n = len(base)
+    order = sorted(range(n), key=lambda i: uncertainty[i], reverse=True)
+    base_rpb = point_biserial(base, gold)
+    rows = []
+    for frac in fractions:
+        k = int(round(frac * n))
+        esc_set = set(order[:k])
+        scored = [
+            c_scores[i] if (i in esc_set and c_scores[i] is not None) else base[i]
+            for i in range(n)
+        ]
+        rpb = point_biserial(scored, gold)
+        rows.append(
+            {
+                "fraction": round(frac, 2),
+                "n_escalated": k,
+                "escalated_rpb": round(rpb, 4),
+                "delta_rpb": round(rpb - base_rpb, 4),
+            }
+        )
+    return rows
+
+
 # =========================================================================
 # IO: assemble the common pool (judge_a + judge_b + judge_c, with gold)
 # =========================================================================
@@ -195,6 +256,8 @@ def assemble_pool(judge_root: Path, inference_root: Path) -> list[dict]:
             {
                 "item_id": item_id,
                 "base": (float(ra) + float(rb)) / 2.0,
+                "rub_a": float(ra),
+                "rub_b": float(rb),
                 "c": float(jc[item_id]["rubric"]),
                 "conf": conf,
                 "gold": gold[item_id],
@@ -214,6 +277,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--judge-root", type=Path, default=JUDGE_ROOT)
     parser.add_argument("--inference-root", type=Path, default=INFERENCE_ROOT)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--signal",
+        choices=["confidence", "disagreement"],
+        default="confidence",
+        help="Routing signal: judge_a/b self-confidence, or |rubric_a - rubric_b|",
+    )
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING"])
     args = parser.parse_args(argv)
@@ -228,35 +297,38 @@ def main(argv: list[str] | None = None) -> int:
     tune_idx, report_idx = split_indices(len(pool), 0.5, args.seed)
     thresholds = [round(t, 2) for t in np.arange(0.0, 1.01, 0.05)]
 
-    def cols(idx: list[int]) -> tuple[list, list, list, list]:
-        base = [pool[i]["base"] for i in idx]
-        c = [pool[i]["c"] for i in idx]
-        conf = [pool[i]["conf"] for i in idx]
-        gold = [pool[i]["gold"] for i in idx]
-        return base, c, conf, gold
+    def cols(idx: list[int]) -> dict[str, list]:
+        return {k: [pool[i][k] for i in idx] for k in ("base", "c", "conf", "rub_a", "rub_b", "gold")}
 
-    tb, tc, tconf, tgold = cols(tune_idx)
-    best_t, tune_delta = best_threshold(tb, tc, tconf, tgold, thresholds)
+    t = cols(tune_idx)
+    best_t, tune_delta = best_threshold(t["base"], t["c"], t["conf"], t["gold"], thresholds)
 
-    rb, rc, rconf, rgold = cols(report_idx)
-    base_rpb = point_biserial(rb, rgold)
-    esc = escalate(rb, rc, rconf, best_t)
-    esc_rpb = point_biserial(esc, rgold)
-    report_delta = esc_rpb - base_rpb
+    r = cols(report_idx)
+    base_rpb = point_biserial(r["base"], r["gold"])
+    esc = escalate(r["base"], r["c"], r["conf"], best_t)
+    esc_rpb = point_biserial(esc, r["gold"])
     n_esc = sum(
-        1 for c, conf in zip(rc, rconf) if c is not None and conf is not None and conf < best_t
+        1 for c, conf in zip(r["c"], r["conf"]) if c is not None and conf is not None and conf < best_t
     )
+
+    # Fixed-budget curve on the report half: escalate only the most-uncertain K%.
+    unc = uncertainty_signal(r["conf"], r["rub_a"], r["rub_b"], args.signal)
+    curve = budget_curve(r["base"], r["c"], unc, r["gold"], [0.1, 0.2, 0.3, 0.5, 1.0])
 
     result = {
         "n_pool": len(pool),
         "n_tune": len(tune_idx),
         "n_report": len(report_idx),
-        "best_threshold": best_t,
-        "tune_delta_rpb": round(tune_delta, 4),
+        "routing_signal": args.signal,
+        "tuned_threshold": {
+            "best_threshold": best_t,
+            "tune_delta_rpb": round(tune_delta, 4),
+            "report_escalated_rpb": round(esc_rpb, 4),
+            "report_delta_rpb": round(esc_rpb - base_rpb, 4),
+            "report_escalated_fraction": round(n_esc / len(report_idx), 4),
+        },
         "report_base_rpb": round(base_rpb, 4),
-        "report_escalated_rpb": round(esc_rpb, 4),
-        "report_delta_rpb": round(report_delta, 4),
-        "report_escalated_fraction": round(n_esc / len(report_idx), 4),
+        "budget_curve": curve,
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)
     json.dump(result, args.out.open("w", encoding="utf-8"), indent=2)
@@ -265,10 +337,18 @@ def main(argv: list[str] | None = None) -> int:
     print("SELECTIVE ESCALATION TO judge_c (RQ3, role iii)")
     print("=" * 64)
     print(f"common pool n={result['n_pool']} (tune {result['n_tune']} / report {result['n_report']})")
-    print(f"tuned threshold (conf <): {best_t}  [tune delta r_pb {result['tune_delta_rpb']}]")
-    print(f"report base r_pb:      {base_rpb:.4f}")
-    print(f"report escalated r_pb: {esc_rpb:.4f}")
-    print(f"report DELTA r_pb:     {report_delta:+.4f}  (escalated {result['report_escalated_fraction']*100:.0f}% of items)")
+    print(f"routing signal: {args.signal}")
+    print(f"report base r_pb: {base_rpb:.4f}")
+    print("\nfixed-budget curve (escalate most-uncertain K%, held-out half):")
+    print(f"  {'budget':>7} {'n_esc':>6} {'esc_rpb':>9} {'delta_rpb':>10}")
+    for row in curve:
+        print(
+            f"  {row['fraction']*100:>6.0f}% {row['n_escalated']:>6} "
+            f"{row['escalated_rpb']:>9.4f} {row['delta_rpb']:>+10.4f}"
+        )
+    print(f"\nfree-optimum threshold (conf<{best_t}): escalates "
+          f"{result['tuned_threshold']['report_escalated_fraction']*100:.0f}%, "
+          f"delta r_pb {result['tuned_threshold']['report_delta_rpb']:+.4f}")
     print("=" * 64)
     return 0
 

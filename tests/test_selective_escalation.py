@@ -14,10 +14,12 @@ sys.path.insert(0, str(_SCRIPTS_DIR))
 
 from analyze_selective_escalation import (  # noqa: E402
     best_threshold,
+    budget_curve,
     delta_rpb,
     escalate,
     point_biserial,
     split_indices,
+    uncertainty_signal,
 )
 
 
@@ -78,6 +80,29 @@ def test_best_threshold_picks_maximising_value() -> None:
 
 
 # --- split_indices -----------------------------------------------------------
+
+
+def test_uncertainty_signal_confidence_and_disagreement() -> None:
+    conf = [0.9, 0.5, None]
+    rub_a = [4.0, 2.0, 5.0]
+    rub_b = [4.0, 5.0, 1.0]
+    # confidence: uncertainty = -conf; None -> inf (most uncertain)
+    assert uncertainty_signal(conf, rub_a, rub_b, "confidence") == [-0.9, -0.5, float("inf")]
+    # disagreement: |a-b|
+    assert uncertainty_signal(conf, rub_a, rub_b, "disagreement") == [0.0, 3.0, 4.0]
+
+
+def test_budget_curve_monotone_and_endpoints() -> None:
+    base = [3.0, 3.0, 3.0, 3.0]
+    gold = [0, 0, 1, 1]
+    c = [1.0, 1.0, 5.0, 5.0]  # c separates gold perfectly
+    unc = [0.4, 0.3, 0.2, 0.1]  # ranking; top fractions escalate first
+    curve = budget_curve(base, c, unc, gold, [0.0, 0.5, 1.0])
+    by_frac = {row["fraction"]: row for row in curve}
+    assert by_frac[0.0]["n_escalated"] == 0
+    assert by_frac[0.0]["delta_rpb"] == 0.0  # nothing escalated -> no change
+    assert by_frac[1.0]["n_escalated"] == 4  # all escalated
+    assert by_frac[1.0]["delta_rpb"] >= by_frac[0.0]["delta_rpb"]  # c helps
 
 
 def test_split_indices_deterministic_disjoint_cover() -> None:
