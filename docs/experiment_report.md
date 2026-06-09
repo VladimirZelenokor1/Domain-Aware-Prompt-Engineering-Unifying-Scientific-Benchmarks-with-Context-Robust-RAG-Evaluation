@@ -321,7 +321,25 @@ has the largest corpus share (70%) and the best domain-match (85%) yet the
 *lowest* rubric, while Chemistry leads despite a modest corpus share (15%) and
 domain-match (55%). Per-domain answer quality therefore tracks the models'
 parametric knowledge rather than retrieval coverage - consistent with the
-closed-book-dominates result (RQ2). Note: the low-rubric **"CS" group is QASPER
+closed-book-dominates result (RQ2).
+
+By model (mean rubric per domain, judge_a+b):
+
+| Model | Chem | Phys | Mat | Bio | mean |
+|---|---|---|---|---|---|
+| Gemma-2-9B | 4.12 | 3.84 | 3.46 | 3.61 | **3.77** |
+| Llama-3.2-3B | 4.24 | 3.78 | 3.49 | 3.53 | 3.76 |
+| Mistral-Nemo-12B | 3.61 | 3.88 | 3.71 | 3.37 | 3.56 |
+| Qwen2.5-7B | 3.54 | 3.70 | 3.53 | 3.41 | 3.51 |
+| DeepSeek-R1-7B | 3.71 | 3.40 | 3.49 | 3.36 | 3.47 |
+| SciPhi-Mistral-7B | 2.95 | 3.09 | 3.26 | 2.09 | **2.62** |
+
+Gemma-2-9B and Llama-3.2-3B lead on rubric quality (the 3B Llama matching the 9B
+Gemma); the science-tuned SciPhi-Mistral-7B is weakest in every domain (mean
+2.62, biology 2.09), consistent with its format-collapse limitation (L3). The
+domain ordering is mostly consistent but not universal: Chemistry tops for
+Gemma/Llama/DeepSeek, while Mistral-Nemo and Qwen2.5 peak on Physics. Note: the
+low-rubric **"CS" group is QASPER
 (Track B / NLP papers)**, a separate dataset - **not** a SciKnowEval domain
 (SciKnowEval has only Biology/Chemistry/Physics/Materials; verified against the
 HF dataset card). Earlier drafts that listed Computer Science among SciKnowEval
