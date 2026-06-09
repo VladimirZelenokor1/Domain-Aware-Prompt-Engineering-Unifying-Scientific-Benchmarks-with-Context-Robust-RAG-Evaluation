@@ -300,7 +300,22 @@ JSON-выход ограничен guided-декодингом (lm-format-enforc
   Cliff's d +0.15).
 
 Per-judge: judge_a строже, judge_b мягче. Рубрика по **доменам** (Track A =
-SciKnowEval, 4 нативных домена): Chemistry > Physics > Materials > Biology.
+SciKnowEval, среднее judge_a/judge_b по оценённым closed-book + RAG ответам):
+
+| Домен | средняя рубрика | n |
+|---|---|---|
+| Chemistry | 3.70 | 1680 |
+| Physics | 3.62 | 1344 |
+| Materials | 3.49 | 672 |
+| Biology | 3.23 | 3024 |
+
+Ранг Chemistry > Physics > Materials > Biology стабилен и в closed-book
+(3.90/3.54/3.49/3.47), и в RAG (3.66/3.63/3.49/3.19). Ключевое: domain-aware
+качество рубрики **развязано с retrieval-релевантностью**: Biology - максимум
+корпус-доли (70%) и domain-match (85%), но *минимум* рубрики; Chemistry лидирует
+при скромных корпус-доле (15%) и domain-match (55%). То есть качество ответа по
+доменам отражает параметрическое знание моделей, а не покрытие ретривала -
+согласуется с выводом «closed-book доминирует» (RQ2).
 Важно: низко-рубричная группа **«CS» - это QASPER (Track B / NLP-статьи)**,
 отдельный датасет, **не** домен SciKnowEval (у SciKnowEval только
 Biology/Chemistry/Physics/Materials; проверено по карточке HF). Формулировки,

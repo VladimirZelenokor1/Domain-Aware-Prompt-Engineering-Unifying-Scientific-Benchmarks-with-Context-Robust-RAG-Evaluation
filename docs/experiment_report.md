@@ -304,8 +304,24 @@ identical n = 4320 pairs.)
   (p = 4.6e-19, Cliff's d +0.15).
 
 Per-judge means: judge_a is the stricter rater, judge_b more lenient.
-Per-**domain** rubric (Track A = SciKnowEval, 4 native domains): Chemistry >
-Physics > Materials > Biology. Note: the low-rubric **"CS" group is QASPER
+Per-**domain** rubric (Track A = SciKnowEval, mean of judge_a/judge_b over the
+judged closed-book + RAG answers):
+
+| Domain | mean rubric | n |
+|---|---|---|
+| Chemistry | 3.70 | 1680 |
+| Physics | 3.62 | 1344 |
+| Materials | 3.49 | 672 |
+| Biology | 3.23 | 3024 |
+
+The ranking Chemistry > Physics > Materials > Biology is stable across both
+closed-book (3.90/3.54/3.49/3.47) and RAG (3.66/3.63/3.49/3.19). Crucially,
+domain-aware rubric quality is **decoupled from retrieval relevance**: Biology
+has the largest corpus share (70%) and the best domain-match (85%) yet the
+*lowest* rubric, while Chemistry leads despite a modest corpus share (15%) and
+domain-match (55%). Per-domain answer quality therefore tracks the models'
+parametric knowledge rather than retrieval coverage - consistent with the
+closed-book-dominates result (RQ2). Note: the low-rubric **"CS" group is QASPER
 (Track B / NLP papers)**, a separate dataset - **not** a SciKnowEval domain
 (SciKnowEval has only Biology/Chemistry/Physics/Materials; verified against the
 HF dataset card). Earlier drafts that listed Computer Science among SciKnowEval
