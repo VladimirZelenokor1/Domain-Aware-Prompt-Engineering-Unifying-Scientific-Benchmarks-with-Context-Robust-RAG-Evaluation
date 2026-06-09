@@ -654,11 +654,15 @@ datasets 3.0.2.
   citation/faithfulness metrics. Moreover, the stored **citation precision/recall
   are themselves degenerate** - per record they are binary (0/1) and precision
   equals recall identically (mean 0.18) rather than behaving as fractional
-  metrics over the 10-passage mixed context. They are therefore **not reported as
-  the intended citation metric and are excluded from the analysis**; answer
-  grounding is evidenced instead by NLI faithfulness and the Track-B
-  evidence-grounding (EG) rate. (The promised citation precision/recall in
-  Objective 1 / RQ2 were computed but found unusable for this reason.)
+  metrics over the 10-passage mixed context. The cause is not established from the
+  stored outputs (the per-record claims and passages the judge scored are not
+  retained; it is *not* explained by answer length, so the citation-runaway above
+  is not the driver). They are therefore **not reported as the intended citation
+  metric and are excluded from the analysis**; answer grounding is evidenced
+  instead by NLI faithfulness and the Track-B evidence-grounding (EG) rate. (The
+  promised citation precision/recall in Objective 1 / RQ2 were computed but found
+  unusable for this reason; a clean measurement would require re-judging with
+  verified passage/claim inputs.)
 - **L5 - Judge calibration / perturbation.** Inter-rater reliability is solid
   (alpha = 0.66, CI [0.65, 0.68]); per-judge ECE 0.10/0.23 (both > 0.05,
   moderate overconfidence). The bounded perturbation audit was **conducted**
