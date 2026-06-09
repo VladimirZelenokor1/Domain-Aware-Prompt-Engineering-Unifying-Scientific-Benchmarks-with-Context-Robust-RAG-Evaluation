@@ -648,9 +648,17 @@ datasets 3.0.2.
   (Cliff's delta = 1.0 vs every peer; parse rate rises with noise) and is
   reported as a documented outlier. Root cause was a missing
   `mistral_instruct` chat template (fixed and regenerated before final runs).
-- **L4 - Citation runaway.** ~27% of generations hit the 1024-token cap with
-  degenerate citation spam (`[2][3]...[220]`). This does not affect extracted
-  answers/accuracy but depresses the judge citation/faithfulness metrics.
+- **L4 - Citation runaway and degenerate citation metrics.** ~27% of generations
+  hit the 1024-token cap with degenerate citation spam (`[2][3]...[220]`). This
+  does not affect extracted answers/accuracy but depresses the judge
+  citation/faithfulness metrics. Moreover, the stored **citation precision/recall
+  are themselves degenerate** - per record they are binary (0/1) and precision
+  equals recall identically (mean 0.18) rather than behaving as fractional
+  metrics over the 10-passage mixed context. They are therefore **not reported as
+  the intended citation metric and are excluded from the analysis**; answer
+  grounding is evidenced instead by NLI faithfulness and the Track-B
+  evidence-grounding (EG) rate. (The promised citation precision/recall in
+  Objective 1 / RQ2 were computed but found unusable for this reason.)
 - **L5 - Judge calibration / perturbation.** Inter-rater reliability is solid
   (alpha = 0.66, CI [0.65, 0.68]); per-judge ECE 0.10/0.23 (both > 0.05,
   moderate overconfidence). The bounded perturbation audit was **conducted**
