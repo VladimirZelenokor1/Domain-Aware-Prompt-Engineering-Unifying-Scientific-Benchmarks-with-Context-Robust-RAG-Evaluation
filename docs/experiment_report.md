@@ -297,8 +297,9 @@ identical n = 4320 pairs.)
   degenerate-signal artifact: self-confidence genuinely varies (std 0.215, full
   0-1 range, n = 20636), yet still fails to route. judge_c is therefore best used
   as a uniform calibration reference, not a budget-limited escalation target.
-- **Per-judge ECE** (MCQ/short-answer subset, B = 10): judge_a 0.103, judge_b
-  0.231 - both > 0.05 (moderate overconfidence).
+- **Per-judge ECE** (MCQ subset, B = 10): judge_a 0.103, judge_b 0.231
+  (n = 2688 each); judge_c 0.348 (n = 840, its calibration subset) - all three
+  > 0.05 (overconfidence, strongest for judge_c).
 - Perturbation Wilcoxon (surface / semantic) - **conducted** (see H3, Section 3):
   class 1 delta = -0.04 (Cliff's d +0.02, negligible), class 2 delta = -0.33
   (p = 4.6e-19, Cliff's d +0.15).
@@ -349,7 +350,7 @@ domains were conflating Track B with Track A.
 rubric is a reliable quality signal. Faithfulness is low across the board,
 consistent with the citation-runaway issue (L4) and a strict NLI threshold.
 QASPER (Track B, open-ended NLP-paper QA) is the hardest set (lowest rubric).
-Calibration is moderate (both judges' ECE > 0.05): models are somewhat
+Calibration is moderate (all three judges' ECE > 0.05): models are somewhat
 overconfident on MCQ.
 
 ### Phase I - Statistics (Chapter 5 tables)
@@ -478,9 +479,10 @@ correctness, 10 bins); paired Wilcoxon on a 200-question perturbation audit
   three-way alpha(a,b,c) = 0.665 (n = 1080) confirms agreement holds with a
   higher-capacity cross-ecosystem judge (pairwise alpha(a,c) = 0.653,
   alpha(b,c) = 0.620).
-- **Per-judge ECE** (B = 10, MCQ/short-answer subset): judge_a **0.103**
-  (n = 2688), judge_b **0.231** (n = 2688) - both > 0.05, so H3(c) holds for
-  every judge (moderate overconfidence, stronger for judge_b).
+- **Per-judge ECE** (B = 10, MCQ subset): judge_a **0.103** (n = 2688),
+  judge_b **0.231** (n = 2688), judge_c **0.348** (n = 840, its calibration
+  subset) - all > 0.05, so H3(c) holds for **every** judge (overconfidence,
+  strongest for judge_c).
 - **Perturbation Wilcoxon + Cliff's delta** (200-question audit, all 6 models,
   da, both judges, ~1200 paired ratings per class). Class 2 is run in **two**
   operationalisations - question-level (negation + re-inference) and the draft
@@ -671,8 +673,8 @@ datasets 3.0.2.
   and would not help - a valid metric needs a marker-based redefinition using the
   model's emitted `[n]` citations, left to future work.)
 - **L5 - Judge calibration / perturbation.** Inter-rater reliability is solid
-  (alpha = 0.66, CI [0.65, 0.68]); per-judge ECE 0.10/0.23 (both > 0.05,
-  moderate overconfidence). The bounded perturbation audit was **conducted**
+  (alpha = 0.66, CI [0.65, 0.68]); per-judge ECE 0.10/0.23/0.35
+  (judge_a/b/c, all > 0.05, overconfidence strongest for judge_c). The bounded perturbation audit was **conducted**
   (200 questions, all 6 models, both judges) in **both** Class-2
   operationalisations: the question-level negation + re-inference variant
   (delta = -0.33, p = 4.6e-19) **and** the draft Sec 3.6.4 answer-level variant
@@ -830,7 +832,7 @@ showed only a directional, non-significant rubric penalty in the pooled model
 suggestive (Spearman -0.14, n.s. at n = 6). **(H3)** The judge panel was
 reliable (Krippendorff's alpha = 0.66, in the predicted 0.40-0.80 band; the
 three-way alpha with a higher-capacity cross-ecosystem judge held at 0.665),
-moderately calibrated (per-judge ECE 0.10/0.23), robust to surface perturbations
+moderately calibrated (per-judge ECE 0.10/0.23/0.35 for judge_a/b/c), robust to surface perturbations
 (rubric delta -0.04) and sensitive to semantic ones (delta -0.33, p = 4.6e-19).
 Supplementary accuracy-based analyses show RAG underperforming closed-book on
 MCQ with no size scaling - traced to uneven cross-domain retrieval relevance
