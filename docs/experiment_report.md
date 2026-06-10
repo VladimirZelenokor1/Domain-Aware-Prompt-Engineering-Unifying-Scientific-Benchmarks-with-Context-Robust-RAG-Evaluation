@@ -654,19 +654,23 @@ datasets 3.0.2.
   citation/faithfulness metrics. Moreover, the stored **citation precision/recall
   are themselves degenerate** - per record they are binary (0/1) and precision
   equals recall identically (mean 0.18) rather than behaving as fractional
-  metrics over the 10-passage mixed context. The cause is not established from the
-  stored outputs (the per-record claims and passages the judge scored are not
-  retained; it is *not* explained by answer length, so the citation-runaway above
-  is not the driver). Faithfulness, computed from the **same** claims, passages
-  and NLI, is by contrast fractional (mean 0.11, with claim-count denominators of
-  4-9), confirming the judge inputs were intact and that the defect is **isolated
-  to the per-passage citation aggregation** - faithfulness, the rubric-based
-  results (H1/H2/H3), and the EG rate are unaffected. The citation metrics are
-  therefore **excluded from the analysis**; answer grounding is evidenced
+  metrics over the 10-passage mixed context. The cause is identified: the
+  per-passage "does this passage entail *any* claim" definition collapses to a
+  binary indicator of whether the answer is grounded at all - citation >= 0.5
+  coincides with mean faithfulness 0.61 (grounded, so passages broadly entail the
+  claims), citation < 0.5 with faithfulness exactly 0 (nothing grounded). The
+  citation metrics therefore carry no information beyond faithfulness and are not
+  valid fractional precision/recall. Faithfulness itself, from the **same**
+  claims/passages/NLI, is intact and fractional (mean 0.11; 82% of answers
+  ungrounded at 0, the grounded 18% at ~0.61), so the defect is **isolated to the
+  citation definition** - faithfulness, the rubric-based results (H1/H2/H3), and
+  the EG rate are unaffected. The citation metrics are therefore **excluded from
+  the analysis**; answer grounding is evidenced
   instead by NLI faithfulness and the Track-B evidence-grounding (EG) rate. (The
   promised citation precision/recall in Objective 1 / RQ2 were computed but found
-  unusable for this reason; a clean measurement would require re-judging with
-  verified passage/claim inputs.)
+  unusable for this reason; re-judging with the same definition is deterministic
+  and would not help - a valid metric needs a marker-based redefinition using the
+  model's emitted `[n]` citations, left to future work.)
 - **L5 - Judge calibration / perturbation.** Inter-rater reliability is solid
   (alpha = 0.66, CI [0.65, 0.68]); per-judge ECE 0.10/0.23 (both > 0.05,
   moderate overconfidence). The bounded perturbation audit was **conducted**
