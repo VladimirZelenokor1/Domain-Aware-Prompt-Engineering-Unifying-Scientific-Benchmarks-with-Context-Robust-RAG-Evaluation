@@ -654,17 +654,16 @@ datasets 3.0.2.
   citation/faithfulness metrics. Moreover, the stored **citation precision/recall
   are themselves degenerate** - per record they are binary (0/1) and precision
   equals recall identically (mean 0.18) rather than behaving as fractional
-  metrics over the 10-passage mixed context. The cause is identified: the
-  per-passage "does this passage entail *any* claim" definition collapses to a
-  binary indicator of whether the answer is grounded at all - citation >= 0.5
-  coincides with mean faithfulness 0.61 (grounded, so passages broadly entail the
-  claims), citation < 0.5 with faithfulness exactly 0 (nothing grounded). The
-  citation metrics therefore carry no information beyond faithfulness and are not
-  valid fractional precision/recall. Faithfulness itself, from the **same**
-  claims/passages/NLI, is intact and fractional (mean 0.11; 82% of answers
-  ungrounded at 0, the grounded 18% at ~0.61), so the defect is **isolated to the
-  citation definition** - faithfulness, the rubric-based results (H1/H2/H3), and
-  the EG rate are unaffected. The citation metrics are therefore **excluded from
+  metrics over the 10-passage mixed context. The cause is identified: scoring a
+  passage relevant when it entails *any* claim collapses citation to a binary
+  indicator of whether the answer is grounded at all - citation >= 0.5 picks out
+  exactly the grounded items (positive faithfulness) and citation < 0.5 the
+  ungrounded ones (faithfulness 0). It therefore carries no information beyond
+  faithfulness and is not valid fractional precision/recall. Faithfulness itself,
+  from the **same** claims/passages/NLI, is intact and fractional (reported per
+  judge above), so the defect is **isolated to the citation definition** -
+  faithfulness, the rubric-based results (H1/H2/H3), and the EG rate are
+  unaffected. The citation metrics are therefore **excluded from
   the analysis**; answer grounding is evidenced
   instead by NLI faithfulness and the Track-B evidence-grounding (EG) rate. (The
   promised citation precision/recall in Objective 1 / RQ2 were computed but found
