@@ -657,8 +657,12 @@ datasets 3.0.2.
   metrics over the 10-passage mixed context. The cause is not established from the
   stored outputs (the per-record claims and passages the judge scored are not
   retained; it is *not* explained by answer length, so the citation-runaway above
-  is not the driver). They are therefore **not reported as the intended citation
-  metric and are excluded from the analysis**; answer grounding is evidenced
+  is not the driver). Faithfulness, computed from the **same** claims, passages
+  and NLI, is by contrast fractional (mean 0.11, with claim-count denominators of
+  4-9), confirming the judge inputs were intact and that the defect is **isolated
+  to the per-passage citation aggregation** - faithfulness, the rubric-based
+  results (H1/H2/H3), and the EG rate are unaffected. The citation metrics are
+  therefore **excluded from the analysis**; answer grounding is evidenced
   instead by NLI faithfulness and the Track-B evidence-grounding (EG) rate. (The
   promised citation precision/recall in Objective 1 / RQ2 were computed but found
   unusable for this reason; a clean measurement would require re-judging with
