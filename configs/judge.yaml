@@ -34,7 +34,10 @@ calibration_judge:
   # run_judge selects the OpenAI client because the name has no "claude".
   model: openai/gpt-oss-120b:free
   role: proprietary_calibration           # drives the API-engine path (kept for compat)
-  scope: dev_set + holdout_audit
+  # Calibration is measured on the MCQ subset of the evaluated MAIN set (per-judge
+  # ECE) and the judged main-set subset (3-way Krippendorff alpha, n~1080) - NOT
+  # on dev/holdout. The earlier "dev_set + holdout_audit" was a plan, not the run.
+  scope: mcq_subset_of_main_test
   max_items: 1000
   cost_cap_usd: 100                       # ignored for the free model (price 0); guards paid runs
   api:
