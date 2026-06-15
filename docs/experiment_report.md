@@ -401,6 +401,20 @@ All three comparisons are Bonferroni-significant (alpha = 0.017). Strategy
 ranking (open-ended): rubric = RAS > CTL > DA > SC; vs ROUGE-L Kendall
 tau = 0.667; vs BLEU-4 tau = 0.333; vs exact-match tau = 0.333.
 
+Per-strategy means on the open-ended subset (n = 96, pooled over the 6 models,
+24/strategy) - the values the rankings above are derived from:
+
+| Strategy | mean rubric | ROUGE-L | BLEU-4 | EM |
+|---|---|---|---|---|
+| RAS | 3.81 | 0.206 | 0.034 | 0.000 |
+| CTL | 3.56 | 0.189 | 0.023 | 0.000 |
+| DA  | 3.33 | 0.190 | 0.019 | 0.000 |
+| SC  | 3.06 | 0.185 | 0.023 | 0.000 |
+
+EM is 0 for every strategy (open-ended answers almost never string-match the gold
+verbatim), so the EM-based ranking is uninformative; the rubric cleanly separates
+the strategies where the lexical metrics barely move.
+
 **Interpretation.** **H1 is supported.** The rubric correlates with gold
 correctness significantly more strongly than every lexical metric (Williams
 test, all three Bonferroni-significant), confirming that domain-aware rubric scoring
@@ -564,11 +578,13 @@ robustness results (`run_statistics.py`).
   Reading: RAG uniformly lowers MCQ accuracy and the deficit does not scale with
   model size (cf. the retrieval domain-mismatch mechanism in Phase F).
 - **Accuracy-based noise model.** Mixed model `EM ~ noise_level + C(strategy) +
-  C(retriever) + (1 | model)` (n = 144): noise_level +0.061 (p = 0.002,
-  FDR-sig), SC +0.060 (p = 3.5e-9), DA +0.025 (p = 0.013), retriever n.s. The
-  positive noise coefficient is a **SciPhi artifact**: excluding SciPhi
-  (n = 120) gives noise_level -0.006 (p = 0.69, n.s.) while strategy effects
-  persist (SC +0.066, p = 1.5e-20). Reading: for well-behaved models retrieval
+  C(retriever) + (1 | model)` (n = 144; strategy reference = CTL, retriever
+  reference = BM25): noise_level +0.061 (p = 0.002, FDR-sig); strategies vs CTL -
+  SC +0.060 (p = 3.5e-9), DA +0.025 (p = 0.013), RAS +0.018 (p = 0.082); retriever
+  (dense +0.019, hybrid +0.004) n.s. The positive noise coefficient is a **SciPhi
+  artifact**: excluding SciPhi (n = 120) gives noise_level -0.006 (p = 0.69,
+  n.s.) while strategy effects persist (SC +0.066, DA +0.032, RAS +0.021; all
+  p < 0.01). Reading: for well-behaved models retrieval
   noise has no significant effect on MCQ *accuracy*; prompting strategy
   (SC > DA > RAS) is the dominant controllable factor; retriever choice is n.s.
   (Contrast with the rubric-based Track-B QASPER, where noise *does*
