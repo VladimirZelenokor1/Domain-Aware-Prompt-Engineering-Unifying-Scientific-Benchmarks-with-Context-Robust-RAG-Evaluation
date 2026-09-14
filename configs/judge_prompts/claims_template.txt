@@ -1,0 +1,7 @@
+Decompose the following answer into a list of atomic factual claims. Each claim should be a single verifiable statement.
+
+ANSWER:
+{answer}
+
+Respond with ONLY a JSON array of strings, e.g.:
+["claim 1", "claim 2", "claim 3"]

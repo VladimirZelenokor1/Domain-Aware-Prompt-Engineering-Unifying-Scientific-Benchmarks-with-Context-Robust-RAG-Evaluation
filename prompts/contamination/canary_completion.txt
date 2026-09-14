@@ -1,0 +1,12 @@
+You are reconstructing an item from a scientific question-answering benchmark.
+
+Here is the opening of a benchmark question:
+"{prefix}"
+
+If you recognize this specific item, complete the question exactly as it
+originally appears and then state its reference answer. If you do not recognize
+it, answer the question as best you can from your own knowledge.
+
+Reply in exactly this format and nothing else:
+QUESTION: <the full original question>
+ANSWER: <the reference answer>

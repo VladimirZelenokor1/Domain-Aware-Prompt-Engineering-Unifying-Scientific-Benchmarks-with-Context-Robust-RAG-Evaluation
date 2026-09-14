@@ -10,6 +10,15 @@ Usage:
 
 from __future__ import annotations
 
+# Ensure CC is set early for triton kernel compilation in vLLM spawned
+# subprocesses (WSL2 uses 'spawn' multiprocessing which loses PATH context).
+import os as _os
+import shutil as _shutil
+
+if "CC" not in _os.environ:
+    _cc = _shutil.which("gcc") or _shutil.which("cc") or "/usr/bin/gcc"
+    _os.environ["CC"] = _cc
+
 import argparse
 import gc
 import json
@@ -55,28 +64,28 @@ _MOCK_TEMPLATES: dict[str, dict[str, str]] = {
         "mc": "ANSWER: {letter}\nJUSTIFICATION: Based on scientific evidence this is correct.",
         "tf": "ANSWER: No\nJUSTIFICATION: The statement contradicts safety protocols.",
         "open": "ANSWER: The procedure follows standard laboratory techniques.\n"
-                "JUSTIFICATION: This follows established methodology in the field.",
+        "JUSTIFICATION: This follows established methodology in the field.",
     },
     "ras": {
         "mc": "ANSWER: {letter}\nKEY REASONING: Analysis of options points to this answer.\n"
-              "UNCERTAINTY: Minor uncertainty about edge cases.\nCONFIDENCE: high",
+        "UNCERTAINTY: Minor uncertainty about edge cases.\nCONFIDENCE: high",
         "tf": "ANSWER: No\nKEY REASONING: Safety standards require specific procedures.\n"
-              "UNCERTAINTY: None.\nCONFIDENCE: high",
+        "UNCERTAINTY: None.\nCONFIDENCE: high",
         "open": "ANSWER: The experimental design follows standard protocols.\n"
-                "KEY REASONING: Based on established literature.\n"
-                "UNCERTAINTY: Sample size effects unknown.\nCONFIDENCE: medium",
+        "KEY REASONING: Based on established literature.\n"
+        "UNCERTAINTY: Sample size effects unknown.\nCONFIDENCE: medium",
     },
     "ctl": {
         "mc": "ANSWER: {letter}\nRATIONALE: Step-by-step analysis leads to this conclusion.",
         "tf": "ANSWER: No\nRATIONALE: Careful consideration of safety requirements shows this.",
         "open": "ANSWER: The method requires careful preparation.\n"
-                "RATIONALE: Standard procedures dictate these steps.",
+        "RATIONALE: Standard procedures dictate these steps.",
     },
     "sc": {
         "mc": "ANSWER: {letter}\nJUSTIFICATION: This is the correct answer.",
         "tf": "ANSWER: No\nJUSTIFICATION: The statement is incorrect.",
         "open": "ANSWER: Standard laboratory procedure.\n"
-                "JUSTIFICATION: Follows established methods.",
+        "JUSTIFICATION: Follows established methods.",
     },
 }
 
@@ -84,6 +93,7 @@ _MOCK_TEMPLATES: dict[str, dict[str, str]] = {
 # =========================================================================
 # Configuration
 # =========================================================================
+
 
 def load_config(config_path: Path) -> dict:
     """Load and validate closed_book.yaml configuration.
@@ -106,6 +116,31 @@ def load_config(config_path: Path) -> dict:
         if key not in config:
             raise KeyError(f"Missing required config key: {key}")
     return config
+
+
+def format_prompts_for_inference(
+    prompts: list[str],
+    model_cfg: dict,
+) -> list[str]:
+    """Apply model-specific prompt wrapping before vLLM.generate.
+
+    Mistral-Nemo-Instruct expects the legacy Mistral chat delimiter around
+    the user block; raw task strings often yield immediate EOS (empty output)
+    under vLLM+AWQ.
+
+    Args:
+        prompts: Plain prompts from build_prompt / build_prompts_batch.
+        model_cfg: Model entry from YAML (may include ``prompt_format``).
+
+    Returns:
+        Same-length list with optional wrapping applied.
+    """
+    fmt = model_cfg.get("prompt_format")
+    if fmt == "mistral_instruct":
+        return [f"<s>[INST]\n{p.strip()}\n[/INST]\n" for p in prompts]
+    if fmt is not None and fmt != "":
+        raise ValueError(f"Unknown prompt_format: {fmt!r}")
+    return prompts
 
 
 def get_model_config(config: dict, model_name: str) -> dict:
@@ -132,6 +167,7 @@ def get_model_config(config: dict, model_name: str) -> dict:
 # =========================================================================
 # Data loading
 # =========================================================================
+
 
 def load_dataset(data_path: Path, split_name: str | None = None) -> list[dict]:
     """Load SciKnowEval JSON dataset and assign question_id to each record.
@@ -160,7 +196,9 @@ def load_dataset(data_path: Path, split_name: str | None = None) -> list[dict]:
     for idx, record in enumerate(data):
         record["question_id"] = f"ske-{split_name}-{idx:05d}"
 
-    logger.info("Loaded %d records from %s (split=%s)", len(data), data_path.name, split_name)
+    logger.info(
+        "Loaded %d records from %s (split=%s)", len(data), data_path.name, split_name
+    )
     return data
 
 
@@ -201,6 +239,7 @@ def get_choices_or_none(record: dict) -> dict[str, list] | None:
 # Prompt building
 # =========================================================================
 
+
 def build_prompts_batch(records: list[dict], strategy: str) -> list[str]:
     """Build prompts for a batch of records.
 
@@ -226,11 +265,13 @@ def build_prompts_batch(records: list[dict], strategy: str) -> list[str]:
 # vLLM engine management
 # =========================================================================
 
+
 def create_engine(model_cfg: dict, seed: int = 42) -> LLM:
     """Create vLLM LLM instance.
 
     Args:
-        model_cfg: Dict with path, quantization, gpu_memory_utilization.
+        model_cfg: Dict with path, quantization, gpu_memory_utilization,
+                   max_model_len, enforce_eager, dtype.
         seed: Global random seed.
 
     Returns:
@@ -239,29 +280,49 @@ def create_engine(model_cfg: dict, seed: int = 42) -> LLM:
     from vllm import LLM as _LLM
 
     model_path = str(PROJECT_ROOT / model_cfg["path"])
+    dtype = model_cfg.get("dtype", "auto")
+    max_model_len = model_cfg.get("max_model_len")
+    gpu_mem = model_cfg.get("gpu_memory_utilization", 0.85)
+    enforce_eager = model_cfg.get("enforce_eager", False)
+
     logger.info(
-        "Loading model from %s (quantization=%s, gpu_mem=%.2f)",
+        "Loading model from %s (quantization=%s, gpu_mem=%.2f, "
+        "max_model_len=%s, enforce_eager=%s, dtype=%s)",
         model_path,
         model_cfg.get("quantization"),
-        model_cfg.get("gpu_memory_utilization", 0.9),
-    )
-    return _LLM(
-        model=model_path,
-        quantization=model_cfg.get("quantization"),
-        gpu_memory_utilization=model_cfg.get("gpu_memory_utilization", 0.9),
-        seed=seed,
-        trust_remote_code=model_cfg.get("trust_remote_code", False),
-        enforce_eager=model_cfg.get("enforce_eager", False),
-        dtype="auto",
+        gpu_mem,
+        max_model_len,
+        enforce_eager,
+        dtype,
     )
 
+    kwargs: dict[str, Any] = {
+        "model": model_path,
+        "quantization": model_cfg.get("quantization"),
+        "gpu_memory_utilization": gpu_mem,
+        "seed": seed,
+        "trust_remote_code": model_cfg.get("trust_remote_code", False),
+        "enforce_eager": enforce_eager,
+        "dtype": dtype,
+    }
+    if max_model_len is not None:
+        kwargs["max_model_len"] = max_model_len
 
-def create_sampling_params(strategy: str, config: dict) -> SamplingParams:
+    return _LLM(**kwargs)
+
+
+def create_sampling_params(
+    strategy: str,
+    config: dict,
+    model_cfg: dict | None = None,
+) -> SamplingParams:
     """Create SamplingParams based on strategy.
 
     Args:
         strategy: One of da, ras, ctl, sc.
         config: Full experiment config dict.
+        model_cfg: Optional model config dict with per-model overrides
+                   (e.g. max_tokens).
 
     Returns:
         vllm.SamplingParams instance.
@@ -269,16 +330,21 @@ def create_sampling_params(strategy: str, config: dict) -> SamplingParams:
     from vllm import SamplingParams as _SamplingParams
 
     inf = config["inference"]
+    # Per-model max_tokens override (e.g. deepseek-r1 needs more tokens)
+    max_tokens = inf["max_tokens"]
+    if model_cfg and "max_tokens" in model_cfg:
+        max_tokens = model_cfg["max_tokens"]
+
     if strategy == "sc":
         return _SamplingParams(
             temperature=inf["temperature_sc"],
-            max_tokens=inf["max_tokens"],
+            max_tokens=max_tokens,
             seed=inf["seed"],
             n=inf["sc_samples"],
         )
     return _SamplingParams(
         temperature=inf["temperature_greedy"],
-        max_tokens=inf["max_tokens"],
+        max_tokens=max_tokens,
         seed=inf["seed"],
         n=1,
     )
@@ -302,6 +368,7 @@ def release_engine(llm: Any) -> None:
 # =========================================================================
 # Mock engine (for testing without GPU)
 # =========================================================================
+
 
 class MockCompletionOutput:
     """Mimics vllm.outputs.CompletionOutput."""
@@ -411,6 +478,45 @@ class _MockSamplingParams:
 # Inference execution
 # =========================================================================
 
+
+def truncate_long_prompts(
+    prompts: list[str],
+    max_model_len: int,
+    max_tokens: int,
+    tokenizer: Any,
+) -> list[str]:
+    """Truncate prompts that would exceed the model's context window.
+
+    Args:
+        prompts: List of prompt strings.
+        max_model_len: Maximum sequence length for the model.
+        max_tokens: Number of tokens reserved for generation.
+        tokenizer: Tokenizer with encode/decode methods.
+
+    Returns:
+        List of prompts (truncated where necessary).
+    """
+    max_prompt_tokens = max_model_len - max_tokens
+    truncated_count = 0
+    result = []
+    for prompt in prompts:
+        token_ids = tokenizer.encode(prompt)
+        if len(token_ids) > max_prompt_tokens:
+            token_ids = token_ids[:max_prompt_tokens]
+            prompt = tokenizer.decode(token_ids)
+            truncated_count += 1
+        result.append(prompt)
+    if truncated_count > 0:
+        logger.warning(
+            "Truncated %d/%d prompts to fit max_model_len=%d (max_prompt_tokens=%d)",
+            truncated_count,
+            len(prompts),
+            max_model_len,
+            max_prompt_tokens,
+        )
+    return result
+
+
 def run_batch(
     llm: Any,
     prompts: list[str],
@@ -432,6 +538,7 @@ def run_batch(
 # =========================================================================
 # Response processing
 # =========================================================================
+
 
 def process_outputs(
     records: list[dict],
@@ -461,9 +568,7 @@ def process_outputs(
 
         # Token counts
         prompt_tokens = (
-            len(output.prompt_token_ids)
-            if output.prompt_token_ids is not None
-            else 0
+            len(output.prompt_token_ids) if output.prompt_token_ids is not None else 0
         )
 
         if strategy == "sc":
@@ -554,6 +659,7 @@ def process_outputs(
 # Checkpointing and output
 # =========================================================================
 
+
 def get_output_path(base_dir: Path, model_name: str, strategy: str) -> Path:
     """Return output JSONL path: {base_dir}/{model_name}/{strategy}.jsonl.
 
@@ -615,6 +721,7 @@ def write_checkpoint(records: list[dict], output_path: Path) -> None:
 # Main pipeline
 # =========================================================================
 
+
 def run_cell(
     model_name: str,
     strategy: str,
@@ -623,6 +730,8 @@ def run_cell(
     limit: int | None = None,
     mock: bool = False,
     engine: Any | None = None,
+    split_file: Path | None = None,
+    output_dir_override: Path | None = None,
 ) -> dict[str, Any]:
     """Run inference for a single model x strategy cell.
 
@@ -639,20 +748,32 @@ def run_cell(
         Summary dict with total, processed, skipped, parse_rate, duration_s.
     """
     if strategy not in VALID_STRATEGIES:
-        raise ValueError(f"Invalid strategy: {strategy}. Must be one of {VALID_STRATEGIES}")
+        raise ValueError(
+            f"Invalid strategy: {strategy}. Must be one of {VALID_STRATEGIES}"
+        )
 
     start_time = time.time()
     inf_config = config["inference"]
 
-    # Load dataset
-    data_path = PROJECT_ROOT / config["data"][split]
-    dataset = load_dataset(data_path, split_name=split.replace("_", "-"))
+    # Load dataset (an explicit split_file overrides the config-resolved path,
+    # e.g. for the H3 perturbation audit splits).
+    if split_file is not None:
+        data_path = split_file
+        split_name = split_file.stem.replace("_", "-")
+    else:
+        data_path = PROJECT_ROOT / config["data"][split]
+        split_name = split.replace("_", "-")
+    dataset = load_dataset(data_path, split_name=split_name)
 
     if limit is not None:
         dataset = dataset[:limit]
 
     # Check for resume
-    output_dir = PROJECT_ROOT / config["output"]["base_dir"]
+    output_dir = (
+        output_dir_override
+        if output_dir_override is not None
+        else PROJECT_ROOT / config["output"]["base_dir"]
+    )
     effective_model = model_name if not mock else "MOCK"
     output_path = get_output_path(output_dir, effective_model, strategy)
     existing = count_existing_records(output_path)
@@ -660,7 +781,10 @@ def run_cell(
     if existing >= len(dataset):
         logger.info(
             "Cell %s/%s already complete (%d/%d records). Skipping.",
-            effective_model, strategy, existing, len(dataset),
+            effective_model,
+            strategy,
+            existing,
+            len(dataset),
         )
         return {
             "model": effective_model,
@@ -676,9 +800,16 @@ def run_cell(
     if existing > 0:
         logger.info(
             "Resuming %s/%s from record %d/%d",
-            effective_model, strategy, existing, len(dataset),
+            effective_model,
+            strategy,
+            existing,
+            len(dataset),
         )
         dataset = dataset[existing:]
+
+    # Resolve model config (for per-model overrides like max_tokens)
+    model_cfg = get_model_config(config, model_name) if not mock else {}
+    effective_max_tokens = model_cfg.get("max_tokens", inf_config["max_tokens"])
 
     # Create engine
     owns_engine = False
@@ -686,21 +817,22 @@ def run_cell(
         if mock:
             engine = MockLLM(records=dataset)
         else:
-            model_cfg = get_model_config(config, model_name)
             engine = create_engine(model_cfg, seed=inf_config["seed"])
         owns_engine = True
 
     # Create sampling params
     if mock:
         params = _MockSamplingParams(
-            temperature=inf_config["temperature_sc"] if strategy == "sc" else inf_config["temperature_greedy"],
-            max_tokens=inf_config["max_tokens"],
+            temperature=inf_config["temperature_sc"]
+            if strategy == "sc"
+            else inf_config["temperature_greedy"],
+            max_tokens=effective_max_tokens,
             seed=inf_config["seed"],
             n=inf_config["sc_samples"] if strategy == "sc" else 1,
         )
         params._strategy = strategy
     else:
-        params = create_sampling_params(strategy, config)
+        params = create_sampling_params(strategy, config, model_cfg)
 
     # Process in checkpoint-sized chunks
     chunk_size = inf_config.get("checkpoint_every", 500)
@@ -717,11 +849,24 @@ def run_cell(
 
         # Build prompts
         prompts = build_prompts_batch(chunk_records, strategy)
+        if model_cfg:
+            prompts = format_prompts_for_inference(prompts, model_cfg)
+
+        # Truncate prompts that exceed context window (safety net)
+        if not mock and hasattr(engine, "get_tokenizer"):
+            max_ml = model_cfg.get("max_model_len", 4096)
+            prompts = truncate_long_prompts(
+                prompts,
+                max_model_len=max_ml,
+                max_tokens=effective_max_tokens,
+                tokenizer=engine.get_tokenizer(),
+            )
 
         # Run inference
         logger.info(
             "Generating %s/%s chunk [%d-%d] (%d prompts, n=%s)...",
-            effective_model, strategy,
+            effective_model,
+            strategy,
             existing + chunk_start,
             existing + chunk_end,
             len(prompts),
@@ -767,7 +912,11 @@ def run_cell(
 
     logger.info(
         "Cell %s/%s complete: %d records, %.1f%% parse rate, %.1fs",
-        effective_model, strategy, total_processed, parse_rate, duration,
+        effective_model,
+        strategy,
+        total_processed,
+        parse_rate,
+        duration,
     )
 
     return {
@@ -785,6 +934,7 @@ def run_cell(
 # =========================================================================
 # CLI
 # =========================================================================
+
 
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments."""
@@ -813,6 +963,18 @@ def parse_args() -> argparse.Namespace:
         default="dev",
         choices=["dev", "main_test"],
         help="Dataset split (default: dev)",
+    )
+    parser.add_argument(
+        "--split-file",
+        type=Path,
+        default=None,
+        help="Explicit dataset JSON path; overrides --split (e.g. perturbation audit).",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=None,
+        help="Override output base dir (default: config output.base_dir).",
     )
     parser.add_argument(
         "--limit",
@@ -849,6 +1011,8 @@ def main() -> None:
         split=args.split,
         limit=args.limit,
         mock=is_mock,
+        split_file=args.split_file,
+        output_dir_override=args.output_dir,
     )
 
     logger.info("Summary: %s", json.dumps(summary, indent=2))

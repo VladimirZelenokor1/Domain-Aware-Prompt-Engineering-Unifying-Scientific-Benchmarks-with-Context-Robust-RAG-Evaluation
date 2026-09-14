@@ -50,14 +50,15 @@ ALL_FIELD_NAMES = [
 # ---------------------------------------------------------------------------
 
 # Step 1: Think block removal (DeepSeek-R1)
-THINK_PATTERN = re.compile(
-    r"<\|?think\|?>.*?<\|?/?think\|?>", re.DOTALL
-)
+THINK_PATTERN = re.compile(r"<\|?think\|?>.*?<\|?/?think\|?>", re.DOTALL)
 
-# Step 2: Preamble - find first field marker
+# Step 2: Preamble - find first field marker.
+# Boundary allows line start, newline, or a closing ']' so a field marker
+# preceded by RAG citation-echo on the same line (e.g. "[11] ANSWER:") is
+# not skipped in favor of a later line-start field.
 _FIELD_NAMES_RE = "|".join(re.escape(f) for f in ALL_FIELD_NAMES)
 FIRST_FIELD_PATTERN = re.compile(
-    rf"(?:^|\n)\s*(?:\*{{1,3}})?(?:{_FIELD_NAMES_RE})(?:\*{{1,3}})?\s*:",
+    rf"(?:^|\n|\])\s*(?:\*{{1,3}})?(?:{_FIELD_NAMES_RE})(?:\*{{1,3}})?\s*:",
     re.IGNORECASE,
 )
 
@@ -65,9 +66,7 @@ FIRST_FIELD_PATTERN = re.compile(
 MARKDOWN_BOLD_PATTERN = re.compile(
     rf"\*{{1,3}}({_FIELD_NAMES_RE})\*{{1,3}}", re.IGNORECASE
 )
-MARKDOWN_CODE_PATTERN = re.compile(
-    rf"`({_FIELD_NAMES_RE})`", re.IGNORECASE
-)
+MARKDOWN_CODE_PATTERN = re.compile(rf"`({_FIELD_NAMES_RE})`", re.IGNORECASE)
 MARKDOWN_HEADER_PATTERN = re.compile(r"^#{1,4}\s*", re.MULTILINE)
 MARKDOWN_CODEBLOCK_PATTERN = re.compile(r"```\w*\n?|```", re.MULTILINE)
 
@@ -75,9 +74,7 @@ MARKDOWN_CODEBLOCK_PATTERN = re.compile(r"```\w*\n?|```", re.MULTILINE)
 
 # Step 5a: MC answer normalization
 MC_LETTER_DIRECT = re.compile(r"^\s*\(?([A-Fa-f])\)?\s*$")
-MC_LETTER_WITH_TEXT = re.compile(
-    r"^\s*\(?([A-Fa-f])\)?[\)\.\:\s]+\S", re.IGNORECASE
-)
+MC_LETTER_WITH_TEXT = re.compile(r"^\s*\(?([A-Fa-f])\)?[\)\.\:\s]+\S", re.IGNORECASE)
 MC_ANSWER_IS = re.compile(
     r"(?:answer|option|choice)\s+(?:is\s+)?[\(\[]?([A-Fa-f])[\)\]]?\b",
     re.IGNORECASE,
@@ -116,7 +113,10 @@ REFUSAL_PATTERN = re.compile(
 
 # Chinese field labels (Qwen fallback)
 CHINESE_ANSWER = re.compile(r"(?:答案|回答)\s*[:：]\s*(.+?)(?:\n|$)")
-CHINESE_REASONING = re.compile(r"(?:理由|解释|说明|推理)\s*[:：]\s*(.+?)(?=(?:答案|回答|理由|解释|说明|推理|置信度|信心|不确定)\s*[:：]|$)", re.DOTALL)
+CHINESE_REASONING = re.compile(
+    r"(?:理由|解释|说明|推理)\s*[:：]\s*(.+?)(?=(?:答案|回答|理由|解释|说明|推理|置信度|信心|不确定)\s*[:：]|$)",
+    re.DOTALL,
+)
 CHINESE_CONFIDENCE = re.compile(r"(?:置信度|信心)\s*[:：]\s*(.+?)(?:\n|$)")
 
 
@@ -194,7 +194,7 @@ def _strip_preamble(text: str) -> str:
     """Remove text before first recognized field label."""
     match = FIRST_FIELD_PATTERN.search(text)
     if match:
-        return text[match.start():].lstrip("\n")
+        return text[match.start() :].lstrip("\n")
     return text
 
 
@@ -306,9 +306,7 @@ def _normalize_mc(raw: str, choices: dict[str, list]) -> str | None:
     best_ratio = 0.0
     best_label = None
     for lbl, txt in zip(labels, texts):
-        ratio = difflib.SequenceMatcher(
-            None, answer_lower, txt.lower()
-        ).ratio()
+        ratio = difflib.SequenceMatcher(None, answer_lower, txt.lower()).ratio()
         if ratio > best_ratio:
             best_ratio = ratio
             best_label = lbl.upper()
@@ -317,9 +315,7 @@ def _normalize_mc(raw: str, choices: dict[str, list]) -> str | None:
         return best_label
 
     # 6. Check if answer contains exactly one valid letter
-    found_letters = [
-        c.upper() for c in answer if c.upper() in valid_labels
-    ]
+    found_letters = [c.upper() for c in answer if c.upper() in valid_labels]
     unique_found = set(found_letters)
     if len(unique_found) == 1:
         return unique_found.pop()
@@ -526,9 +522,7 @@ def parse_response(
     result.justification = fields.get("JUSTIFICATION")
     result.key_reasoning = fields.get("KEY REASONING")
     result.uncertainty = fields.get("UNCERTAINTY")
-    result.confidence = (
-        fields.get("CONFIDENCE", "").strip().lower() or None
-    )
+    result.confidence = fields.get("CONFIDENCE", "").strip().lower() or None
     result.rationale = fields.get("RATIONALE")
 
     # Step 6: Extract citations (RAG only)
@@ -604,9 +598,7 @@ def aggregate_sc(
     )
 
     # Filter to successfully parsed, non-refusal samples
-    valid = [
-        s for s in samples if s.parse_success and not s.refusal
-    ]
+    valid = [s for s in samples if s.parse_success and not s.refusal]
     result.valid_samples = len(valid)
 
     if not valid:

@@ -2,25 +2,54 @@ experiment: closed_book
 
 data:
   dev: data/sciknoweval/dev.json
-  main_test: data/sciknoweval/main_test.json
+  main_test: data/sciknoweval/main_test_sampled.json
 
 models:
   llama-3.2-3b:
     path: models/llama-3.2-3b-awq
     quantization: awq
-    gpu_memory_utilization: 0.90
+    gpu_memory_utilization: 0.85
+    max_model_len: 4096
+    enforce_eager: true
+    dtype: float16
   qwen2.5-7b:
     path: models/qwen2.5-7b-awq
     quantization: awq
-    gpu_memory_utilization: 0.90
+    gpu_memory_utilization: 0.85
+    max_model_len: 4096
+    enforce_eager: true
+    dtype: float16
   sciphi-mistral-7b:
     path: models/sciphi-mistral-7b-awq
     quantization: awq
-    gpu_memory_utilization: 0.90
+    gpu_memory_utilization: 0.85
+    max_model_len: 4096
+    enforce_eager: true
+    dtype: float16
+    prompt_format: mistral_instruct
   deepseek-r1-qwen-7b:
     path: models/deepseek-r1-qwen-7b-awq
     quantization: awq
-    gpu_memory_utilization: 0.90
+    gpu_memory_utilization: 0.85
+    max_model_len: 4096
+    enforce_eager: true
+    dtype: float16
+  gemma-2-9b:
+    path: models/gemma-2-9b-awq
+    quantization: awq_marlin
+    gpu_memory_utilization: 0.85
+    max_model_len: 4096
+    enforce_eager: true
+    dtype: float16
+  mistral-nemo-12b:
+    path: models/mistral-nemo-12b-awq
+    quantization: awq
+    gpu_memory_utilization: 0.85
+    max_model_len: 4096
+    enforce_eager: true
+    dtype: float16
+    # vLLM+AWQ: raw prompts often yield empty generations; wrap user block.
+    prompt_format: mistral_instruct
 
 strategies:
   - da
@@ -38,4 +67,4 @@ inference:
   checkpoint_every: 500
 
 output:
-  base_dir: outputs/closed_book
+  base_dir: outputs/closed_book_main_test

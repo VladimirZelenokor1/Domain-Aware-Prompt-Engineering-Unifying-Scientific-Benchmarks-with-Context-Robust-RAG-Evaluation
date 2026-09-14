@@ -1,0 +1,12 @@
+Compare the model answer against the gold answer and identify key points.
+
+GOLD ANSWER:
+{gold_answer}
+
+MODEL ANSWER:
+{model_answer}
+
+List each key point from the gold answer and whether the model answer covers it.
+
+Respond with ONLY a JSON object:
+{"key_points_total": <int>, "key_points_covered": <int>, "missing_points": ["point1", ...]}

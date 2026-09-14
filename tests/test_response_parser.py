@@ -87,9 +87,7 @@ class TestGoodPath:
             "JUSTIFICATION: According to [1], water is a polar compound. "
             "This is supported by [3] which mentions sodium chloride dissolving in water."
         )
-        result = parse_response(
-            raw, "da", "mcq-4-choices", choices_4, mode="rag"
-        )
+        result = parse_response(raw, "da", "mcq-4-choices", choices_4, mode="rag")
         assert result.parse_success is True
         assert result.answer_normalized == "B"
         assert result.citations == [1, 3]
@@ -116,12 +114,24 @@ class TestEdgeCases:
         assert result.parse_success is True
         assert result.answer_normalized == "C"
 
+    def test_citation_echo_before_answer_field(self, choices_4: dict) -> None:
+        """#6b: RAG citation-echo bleeds onto the ANSWER line (SciPhi).
+
+        Real SciPhi RAG output starts with a truncated citation like '11]'
+        on the same line as the ANSWER marker. Preamble strip must keep the
+        ANSWER line instead of discarding it for a later line-start field.
+        """
+        raw = (
+            "11] ANSWER: B) Water\n"
+            "JUSTIFICATION: Water is a polar molecule and a universal solvent."
+        )
+        result = parse_response(raw, "da", "mcq-4-choices", choices_4, mode="rag")
+        assert result.parse_success is True
+        assert result.answer_normalized == "B"
+
     def test_lowercase_field_names(self, choices_4: dict) -> None:
         """#7: Lowercase 'answer:' instead of 'ANSWER:'."""
-        raw = (
-            "answer: B\n"
-            "justification: Water is the universal solvent."
-        )
+        raw = "answer: B\njustification: Water is the universal solvent."
         result = parse_response(raw, "da", "mcq-4-choices", choices_4)
         assert result.parse_success is True
         assert result.answer_normalized == "B"
@@ -201,9 +211,7 @@ class TestEdgeCases:
             "ANSWER: B\n"
             "JUSTIFICATION: Based on [1, 2], water is polar and widely studied."
         )
-        result = parse_response(
-            raw, "da", "mcq-4-choices", choices_4, mode="rag"
-        )
+        result = parse_response(raw, "da", "mcq-4-choices", choices_4, mode="rag")
         assert result.parse_success is True
         assert result.citations == [1, 2]
 
@@ -213,9 +221,7 @@ class TestEdgeCases:
             "ANSWER: A\n"
             "JUSTIFICATION: As discussed in [1][2], fire requires fuel and oxygen."
         )
-        result = parse_response(
-            raw, "da", "mcq-4-choices", choices_4, mode="rag"
-        )
+        result = parse_response(raw, "da", "mcq-4-choices", choices_4, mode="rag")
         assert result.parse_success is True
         assert result.citations == [1, 2]
 
@@ -226,9 +232,7 @@ class TestEdgeCases:
             "JUSTIFICATION: According to passage 1 and passage 3, "
             "water dissolves ionic compounds like NaCl."
         )
-        result = parse_response(
-            raw, "da", "mcq-4-choices", choices_4, mode="rag"
-        )
+        result = parse_response(raw, "da", "mcq-4-choices", choices_4, mode="rag")
         assert result.parse_success is True
         assert 1 in result.citations
         assert 3 in result.citations
@@ -245,32 +249,21 @@ class TestEdgeCases:
 
     def test_mc_full_text_fuzzy_match(self, choices_4: dict) -> None:
         """#17: MC answer is full choice text without letter -> fuzzy match."""
-        raw = (
-            "ANSWER: Water\n"
-            "JUSTIFICATION: Water is the correct choice."
-        )
+        raw = "ANSWER: Water\nJUSTIFICATION: Water is the correct choice."
         result = parse_response(raw, "da", "mcq-4-choices", choices_4)
         assert result.parse_success is True
         assert result.answer_normalized == "B"
 
     def test_tf_true_normalized_to_yes(self) -> None:
         """#18: true_or_false answer 'True' -> 'Yes'."""
-        raw = (
-            "ANSWER: True\n"
-            "JUSTIFICATION: The statement is factually correct."
-        )
+        raw = "ANSWER: True\nJUSTIFICATION: The statement is factually correct."
         result = parse_response(raw, "da", "true_or_false")
         assert result.parse_success is True
         assert result.answer_normalized == "Yes"
 
     def test_codeblock_wrapped_response(self, choices_4: dict) -> None:
         """#19: Response wrapped in markdown code block."""
-        raw = (
-            "```\n"
-            "ANSWER: C\n"
-            "JUSTIFICATION: Air is a mixture of gases.\n"
-            "```"
-        )
+        raw = "```\nANSWER: C\nJUSTIFICATION: Air is a mixture of gases.\n```"
         result = parse_response(raw, "da", "mcq-4-choices", choices_4)
         assert result.parse_success is True
         assert result.answer_normalized == "C"
