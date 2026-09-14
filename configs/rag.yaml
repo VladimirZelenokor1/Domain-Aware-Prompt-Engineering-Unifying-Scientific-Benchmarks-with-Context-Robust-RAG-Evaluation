@@ -76,7 +76,9 @@ inference:
   sc_samples: 5
   sc_min_valid: 3
   top_k_passages: 10
-  checkpoint_every: 500
+  # Generation batch size only (not a model or sampling parameter). The final
+  # runs used 100; the llama-3.2-3b DA/RAS/CTL cells were generated earlier with 500.
+  checkpoint_every: 100
 
 output:
   base_dir: outputs/rag_main

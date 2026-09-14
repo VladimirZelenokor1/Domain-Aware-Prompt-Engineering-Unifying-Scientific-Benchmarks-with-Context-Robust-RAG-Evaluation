@@ -182,7 +182,7 @@ class TestRagConfig:
         assert rag_config["inference"]["top_k_passages"] == 10
 
     def test_has_checkpoint_every(self, rag_config: dict) -> None:
-        assert rag_config["inference"]["checkpoint_every"] == 500
+        assert rag_config["inference"]["checkpoint_every"] == 100
 
 
 # =========================================================================

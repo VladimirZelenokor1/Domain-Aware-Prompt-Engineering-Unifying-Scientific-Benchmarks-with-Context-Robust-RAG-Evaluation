@@ -67,4 +67,4 @@ inference:
   checkpoint_every: 500
 
 output:
-  base_dir: outputs/closed_book
+  base_dir: outputs/closed_book_main_test

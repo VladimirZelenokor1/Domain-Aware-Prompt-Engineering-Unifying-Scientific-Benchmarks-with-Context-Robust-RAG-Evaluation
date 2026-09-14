@@ -1,23 +1,19 @@
 # LLM-judge panel configuration (Variant D: automatic-only reliability).
 #
-# Populated:  Phase 1 (this stub - panel architecture declared).
-# To finish:  Phase 7 (rubric prompts, API endpoints, retry/backoff parameters,
-#             calibration budget cap, perturbation protocol details).
-#
 # Panel architecture:
-#   - Two open-weight judges (judge_a, judge_b) score the full main_test
-#     outputs. They must be distinct from every examinee model family to
-#     preserve judge-examinee independence.
-#   - One proprietary judge (judge_c) scores a bounded calibration subset
-#     (dev + holdout audit). Used for ECE calibration and Krippendorff's
-#     alpha(A, B, C).
+#   - Two open-weight judges (judge_a, judge_b) score the first 20 records of
+#     every inference cell (run_judge.py --limit-per-file 20). They must be
+#     distinct from every examinee model family to preserve judge-examinee
+#     independence.
+#   - A higher-capacity calibration judge (judge_c) scores a bounded subset of
+#     the main set. Used for ECE calibration and Krippendorff's alpha(A, B, C).
 
 main_set_judges:
   - id: judge_a
     model: llama-3.1-8b-judge-awq    # local dir under models/
     role: open_weight_primary
     must_differ_from_examinees: true
-    hf_id_candidate: solidrust/Llama-3.1-8B-Instruct-AWQ-INT4
+    hf_id_candidate: hugging-quants/Meta-Llama-3.1-8B-Instruct-AWQ-INT4  # source used on the server
     fallback_if_oom: qwen2-7b-instruct-awq   # NOT Qwen2.5 (examinee family)
   - id: judge_b
     model: mistral-7b-v0.3-judge-awq  # local dir under models/, distinct from SciPhi-Mistral
