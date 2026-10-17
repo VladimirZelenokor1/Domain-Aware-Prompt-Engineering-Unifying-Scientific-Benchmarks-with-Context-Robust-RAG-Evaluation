@@ -1,0 +1,196 @@
+
+
+  1. Q1  --- can we get the retrieval indices and the corpus chunk text?
+            One archive unblocks four separate open items.
+  2. Q10 --- does the relevant author accept that faithfulness is invalid,
+            against their own report's L4, which says it is intact?
+  3. Q16 --- is there ~6 GPU hours for the closed-book judging extension?
+
+--------------------------------------------------------------------------------
+PART A --- BLOCKED ON MISSING DATA
+--------------------------------------------------------------------------------
+
+Q1  [2A] Can the BM25/Lucene index, the FAISS index, and the corpus chunk TEXT
+         be recovered or rebuilt?
+         The chunk manifest carries chunk_id, source, source_id, domain and
+         sha256_text --- but no text column. Noise passage text IS present
+         (25,000 irrelevant distractors, 3,000 contradictory, 3,000 injection);
+         real passage text is not, and at noise level 0.0 every passage is real.
+         This single archive unblocks Q2, Q3, Q4 and Q13 together.
+
+Q2  [2A] Can the unbiased dev-set Recall@10 figures (0.69 BM25 / 0.53 dense /
+         0.68 hybrid) be materialised?
+         They exist nowhere in the archive. The dev split was never filtered on
+         retrievability, so these are the only honest recall numbers available.
+         Needs Q1.
+
+Q3  [2A] Can strict Recall@10 be computed excluding true/false items?
+         The function exists at retrievability_filter.py:865-923 but needs the
+         indices plus corpus text. Until then no number will be printed --- the
+         strict matcher counts every true/false item as a hit as soon as any
+         passage is returned. Needs Q1.
+
+Q4  [2A] Do build logs exist for the 100,001-chunk FAISS restoration?
+         faiss_gap_diagnostic.py and faiss_gap_repair.py are in the repository;
+         no output of either was kept. Currently unverifiable.
+
+--------------------------------------------------------------------------------
+PART B --- ARISING FROM WHAT THE ARCHIVE REVEALED
+--------------------------------------------------------------------------------
+
+Q5  [GS] H2 now survives question clustering. Which specification do we report
+         as primary?
+             OLS cluster-robust     +0.846, p = 7.1e-05, CI 0.429 - 1.263
+             MixedLM (1|question)   +0.548, p = 4.7e-14, question ICC 0.307
+             cluster bootstrap      +0.849, CI 0.438 - 1.264, P(<=0) = 0.000
+         My recommendation: lead with the cluster-robust OLS and report the
+         bootstrap CI alongside it; give the mixed model as a robustness check,
+         noting the shrinkage to +0.548.
+
+Q6  [GS] Krippendorff's alpha: which interval do we print?
+             reported, item-level bootstrap   0.646 - 0.681
+             question-clustered bootstrap     0.558 - 0.751
+         My recommendation: the clustered interval, stated as such. It is 2.7x
+         wider, still moderate, and its lower bound is still above 0.5.
+
+Q7  [GS] The evaluation sample's selection effect is now measured exactly.
+         Do we publish it as a RESULT rather than only as a threat?
+             retrievability pass rate by difficulty:
+             L1 77.2%  L2 79.4%  L3 27.4%  L4 70.2%  L5 46.5%
+             L3 falls from 16.7% of the pool to 6.9% of the sample
+             all 182 two-choice MCQ items are eliminated (0 of 182 pass)
+             true/false rises 11.3% -> 14.8%
+             domain shifts stay within 2 percentage points
+         My recommendation: yes. It converts the largest open threat into a
+         measured finding, and it is the kind of thing EMSE rewards.
+
+Q8  [2A] The judged 20 contain ZERO L3 and ZERO L5 items (12.9% of the sample).
+         If the judging extension runs, should the new questions be stratified
+         to repair this, rather than drawn at random?
+
+Q9  [GS] The denoise rate (>= 0.92) and answer-context utility both rest on the
+         same 20 questions --- acu_dr_summary.json carries n = 20 in all 96
+         cells. Sections 2 and 6 currently lean on the denoise rate to explain
+         the disagreement with RGB and CRAG. Do we
+           (a) keep it, explicitly qualified as resting on 20 questions,
+           (b) demote it to a conjecture, or
+           (c) hold it until the judging extension runs?
+         My recommendation: (a) now, upgrading to a firm claim if Q16 runs.
+
+Q10 [2A] The study's own report (docs/experiment_report.md, limitation L4)
+         states that the citation metrics are degenerate because a passage was
+         scored relevant when it entailed ANY claim, and that FAITHFULNESS IS
+         INTACT. The code says otherwise: run_judge.py lines 259, 588 and 732
+         take passages straight from record["passages_used"], which carries only
+         chunk_id and noise_type in both rag_main and qasper_main; there is no
+         chunk_id-to-text lookup anywhere in the script; so p.get("text", "") at
+         line 431 (faithfulness) and line 483 (citation) yields an empty premise
+         for every passage.
+         Does the second author accept that faithfulness is invalid too, and
+         that the identical precision == recall is a symptom of this upstream
+         defect rather than of the definition L4 blames?
+         The manuscript currently says faithfulness is invalid. I believe that
+         is right and the report is wrong, but the second author should confirm
+         before we publish a correction to their own document.
+
+Q11 [GS] The noise coefficient's sign is entirely SciPhi:
+             with SciPhi     +0.0609, p = 0.0019   (positive, significant)
+             without SciPhi  -0.0055, p = 0.686    (null)
+         Confirm we state every noise claim from the no-SciPhi fit and say so.
+
+Q12 [GS] The report itself concedes (line 386) that the rubric-versus-exact-
+         match comparison is partly self-referential, because the correctness
+         label y_gold IS type-aware exact match while the competitor is raw
+         string equality. That makes +0.37 over exact match the weakest of the
+         three contrasts, and ROUGE-L (+0.14) is unresolved.
+         Should BLEU-4 (+0.29, CI 0.12 - 0.44) carry Finding 1 instead?
+         My recommendation: yes --- it is the cleanest surviving comparison.
+
+Q13 [2A] The perturbation battery is 200 distinct questions, not 600: base,
+         class2pad and class2trunc share one identifier set, class1 and class2
+         are re-identified copies. Does the RQ3 stability statement need
+         restating at n = 200?
+
+Q14 [GS] Judge C scored exactly 5 distinct questions, all MCQ, in every one of
+         216 cells; Track B evidence grounding rests on 17 questions per cell.
+         Do we report the judge C calibration figure (ECE 0.342) and the
+         evidence-grounding figures at all, and if so with what qualification?
+
+Q15 [2A] Confirm we correct the underlying record in the paper:
+           deduplication removed 4,302 chunks --- not the manifest's own
+             counter of 4,311, nor the thesis's 3,967
+           corpus is 3,939,826 chunks: biology 2,775,042 (70.44%),
+             chemistry 580,231 (14.73%), physics 310,800 (7.89%),
+             earth science 234,230 (5.95%), materials 39,523 (1.00%)
+         Both verified by direct row count of the chunk manifest.
+
+--------------------------------------------------------------------------------
+PART C --- COMPUTE, IN PRIORITY ORDER
+--------------------------------------------------------------------------------
+
+Q16 [CO] ~6 GPU hours --- extend closed-book judging by ~300 questions across 24
+         cells. Best value in the project: it rescues Finding 1 and would
+         probably settle ROUGE-L. See Q8 on stratifying the new draw.
+
+Q17 [CO] ~34 GPU hours --- extend RAG judging by ~300 questions across 144
+         cells. Lifts H2, alpha, ECE, the domain means, the denoise rate and
+         answer-context utility off their shared 20-question base.
+
+Q18 [CO] Citation and faithfulness repair (~1M NLI comparisons). NOTE: this is
+         blocked on Q1, not on GPU time. Without the corpus text there is
+         nothing to compare claims against.
+
+Q19 [CO] Track C, the software-engineering benchmark (~24,000 generations plus
+         judging). Would reverse the Amendment A4 scope-down and restore the
+         stronger SE claim. Does its status change now that only compute is
+         missing?
+
+Q20 [CO] SciPhi re-run with the correct chat template (~17% recompute).
+         Restores the science-tuned versus general contrast, currently lost, and
+         would remove the outlier distorting the noise coefficient (Q11).
+
+--------------------------------------------------------------------------------
+PART D --- PUBLICATION DECISIONS
+--------------------------------------------------------------------------------
+
+Q21 [2A] The ~10 to 14 citations filling the eight bibliography gaps listed in
+         paper/bibliography-gaps.md. Gap 1, mixed-effects methodology, is now
+         load-bearing: the paper must justify a re-specified model.
+
+Q22 [GS] The Springer/EMSE document class and its options. The scaffold still
+         defaults to article behind a documented switch.
+
+Q23 [GS] Registered-report track for the human study --- yes or no? The frozen
+         pre-commitment maps onto it closely.
+
+Q24 [GS] Does the paper still lead with Finding 1? It survives but narrowed.
+         If Q16 runs and settles ROUGE-L the answer is clearly yes; if not, the
+         evaluator-validity contribution may be the stronger lead. See Q12.
+
+Q25 [GS] Section 7 promises an appendix mapping our threats onto the underlying
+         study's own limitation numbering. That numbering has now been found:
+         L1 to L8 in docs/experiment_report.md. Confirm we build the mapping.
+
+--------------------------------------------------------------------------------
+PART E --- HUMAN STUDY
+--------------------------------------------------------------------------------
+
+         Note: the instrument already exists and is unrated ---
+         analysis_outputs/judge_human_sample.csv holds 191 items with a blank
+         human_rubric column, and judge_human_key.json holds 80 items with the
+         judge_a and judge_b scores. Nobody has rated them.
+
+Q26 [GS] Ethics submission status?
+
+Q27 [GS] Rater recruitment route --- departmental doctoral students, named
+         collaborators, or something else?
+
+Q28 [GS] The attention-check rule. The frozen pre-commitment requires it to be
+         specified BEFORE rating begins.
+
+Q29 [GS] Compensation and timeline?
+
+Q30 [GS] Do we rate the 191 items already drawn, or draw a fresh sample that
+         also covers L3 and L5 (see Q8)?
+
+================================================================================
