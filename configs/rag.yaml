@@ -76,7 +76,7 @@ inference:
   sc_samples: 5
   sc_min_valid: 3
   top_k_passages: 10
-  checkpoint_every: 500
+  checkpoint_every: 100
 
 output:
   base_dir: outputs/rag_main
